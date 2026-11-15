@@ -1,0 +1,271 @@
+if game.CoreGui:FindFirstChild("StudioBlockBuilderGui") then
+    game.CoreGui.StudioBlockBuilderGui:Destroy()
+end
+
+local Players = game:GetService("Players")
+local CoreGui = game:GetService("CoreGui")
+local CollectionService = game:GetService("CollectionService")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local mouse = player:GetMouse()
+local currentBlock = nil
+
+local MY_BLOCK_TAG = "PlayerSpawnedBlock_" .. player.UserId
+
+-- СОЗДАНИЕ МЕНЮ
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "StudioBlockBuilderGui"
+screenGui.Parent = CoreGui
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 200, 0, 195) -- Немного увеличил высоту под кнопку удаления
+mainFrame.Position = UDim2.new(0.05, 0, 0.4, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+mainFrame.BorderSizePixel = 1
+mainFrame.Active = true
+mainFrame.Draggable = true
+mainFrame.Parent = screenGui
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 25)
+title.Text = "Studio Tools + Delete"
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+title.Parent = mainFrame
+
+local spawnBtn = Instance.new("TextButton")
+spawnBtn.Size = UDim2.new(0.9, 0, 0, 30)
+spawnBtn.Position = UDim2.new(0.05, 0, 0.18, 0)
+spawnBtn.Text = "Создать Блок"
+spawnBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
+spawnBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+spawnBtn.Parent = mainFrame
+
+-- КНОПКА РЕЖИМА УДАЛЕНИЯ
+local deleteModeBtn = Instance.new("TextButton")
+deleteModeBtn.Size = UDim2.new(0.9, 0, 0, 30)
+deleteModeBtn.Position = UDim2.new(0.05, 0, 0.38, 0)
+deleteModeBtn.Text = "Удаление: ВЫКЛ"
+deleteModeBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+deleteModeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+deleteModeBtn.Font = Enum.Font.SourceSansBold
+deleteModeBtn.Parent = mainFrame
+
+local infoText = Instance.new("TextLabel")
+infoText.Size = UDim2.new(0.9, 0, 0, 75)
+infoText.Position = UDim2.new(0.05, 0, 0.58, 0)
+infoText.Text = "1 — Выделение (Драг)\n2 — Движение (Стрелки)\n3 — Размер (Кружки)\n4 — Поворот (Круги)\nCtrl+C — Копия | Del — Удалить"
+infoText.TextColor3 = Color3.fromRGB(200, 200, 200)
+infoText.BackgroundTransparency = 1
+infoText.TextSize = 12
+infoText.TextXAlignment = Enum.TextXAlignment.Left
+infoText.Parent = mainFrame
+
+-- Инструменты выделения (Handles)
+local moveHandles = Instance.new("Handles")
+moveHandles.Style = Enum.HandlesStyle.Movement
+moveHandles.Parent = screenGui
+
+local resizeHandles = Instance.new("Handles")
+resizeHandles.Style = Enum.HandlesStyle.Resize
+resizeHandles.Parent = screenGui
+
+local rotateHandles = Instance.new("ArcHandles")
+rotateHandles.Parent = screenGui
+
+-- Логика режимов
+local currentMode = "Move" 
+local isDeleteModeActive = false -- Флаг режима удаления из GUI
+local isDraggingBlock = false 
+local originalSize = nil
+local originalCFrame = nil
+
+local function clearHandles()
+    moveHandles.Adornee = nil
+    resizeHandles.Adornee = nil
+    rotateHandles.Adornee = nil
+end
+
+local function updateHandles()
+    clearHandles()
+    -- Если включен глобальный режим удаления, скрываем любые стрелочки/кружки
+    if isDeleteModeActive or not currentBlock or not currentBlock.Parent then return end
+    
+    if currentMode == "Move" then
+        moveHandles.Adornee = currentBlock
+    elseif currentMode == "Resize" then
+        resizeHandles.Adornee = currentBlock
+    elseif currentMode == "Rotate" then
+        rotateHandles.Adornee = currentBlock
+    end
+end
+
+-- Логика кнопки переключения режима удаления
+deleteModeBtn.MouseButton1Click:Connect(function()
+    isDeleteModeActive = not isDeleteModeActive
+    if isDeleteModeActive then
+        deleteModeBtn.Text = "Удаление: ВКЛ ❌"
+        deleteModeBtn.BackgroundColor3 = Color3.fromRGB(180, 0, 0)
+        currentBlock = nil -- Сбрасываем текущее выделение
+        clearHandles()
+    else
+        deleteModeBtn.Text = "Удаление: ВЫКЛ"
+        deleteModeBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+        updateHandles()
+    end
+end)
+
+-- РЕЖИМ 1: Свободное перетаскивание курсором мыши (Select)
+RunService.RenderStepped:Connect(function()
+    if not isDeleteModeActive and currentMode == "Select" and isDraggingBlock and currentBlock and currentBlock.Parent then
+        if mouse.Target ~= currentBlock then
+            currentBlock.Position = mouse.Hit.p + Vector3.new(0, currentBlock.Size.Y / 2, 0)
+        end
+    end
+end)
+
+-- ОБРАБОТКА НАЖАТИЙ КЛАВИАТУРЫ
+local inputConnection = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    
+    -- Горячие клавиши 1, 2, 3, 4 работают только если выключен режим стирания
+    if not isDeleteModeActive then
+        if input.KeyCode == Enum.KeyCode.One or input.KeyCode == Enum.KeyCode.KeypadOne then
+            currentMode = "Select"
+            updateHandles()
+        elseif input.KeyCode == Enum.KeyCode.Two or input.KeyCode == Enum.KeyCode.KeypadTwo then
+            currentMode = "Move"
+            updateHandles()
+        elseif input.KeyCode == Enum.KeyCode.Three or input.KeyCode == Enum.KeyCode.KeypadThree then
+            currentMode = "Resize"
+            updateHandles()
+        elseif input.KeyCode == Enum.KeyCode.Four or input.KeyCode == Enum.KeyCode.KeypadFour then
+            currentMode = "Rotate"
+            updateHandles()
+        
+        -- Копирование Ctrl + C
+        elseif input.KeyCode == Enum.KeyCode.C and UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
+            if currentBlock and currentBlock.Parent then
+                local clone = currentBlock:Clone()
+                clone.CFrame = currentBlock.CFrame * CFrame.new(currentBlock.Size.X + 2, 0, 0)
+                clone.Parent = workspace
+                CollectionService:AddTag(clone, MY_BLOCK_TAG)
+                currentBlock = clone
+                updateHandles()
+            end
+        end
+    end
+    
+    -- Быстрое одиночное удаление выделенного блока на Delete/Backspace
+    if input.KeyCode == Enum.KeyCode.Delete or input.KeyCode == Enum.KeyCode.Backspace then
+        if currentBlock then
+            currentBlock:Destroy()
+            currentBlock = nil
+            clearHandles()
+        end
+    end
+    
+    -- Нажатие ЛКМ (Выделение, Драг или Удаление в режиме стирания)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        local target = mouse.Target
+        if target and target:IsA("BasePart") and CollectionService:HasTag(target, MY_BLOCK_TAG) then
+            if isDeleteModeActive then
+                -- Если режим удаления включен кнопкой — стираем блок кликом
+                target:Destroy()
+            else
+                -- Иначе выбираем его для работы инструментами
+                currentBlock = target
+                updateHandles()
+                if currentMode == "Select" then
+                    isDraggingBlock = true
+                end
+            end
+        end
+    end
+end)
+
+-- Отжатие ЛКМ (Для перетаскивания)
+local inputEndedConnection = UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        isDraggingBlock = false
+    end
+end)
+
+-- Очистка при смерти
+local function setupDeathShortcut()
+    local character = player.Character or player.CharacterAdded:Wait()
+    local humanoid = character:WaitForChild("Humanoid", 5)
+    if humanoid then
+        humanoid.Died:Connect(function()
+            if inputConnection then inputConnection:Disconnect() end
+            if inputEndedConnection then inputEndedConnection:Disconnect() end
+            screenGui:Destroy()
+        end)
+    end
+end
+setupDeathShortcut()
+player.CharacterAdded:Connect(setupDeathShortcut)
+
+-- Логика кнопки спавна
+spawnBtn.MouseButton1Click:Connect(function()
+    local block = Instance.new("Part")
+    block.Size = Vector3.new(4, 4, 4)
+    block.CFrame = player.Character and player.Character.PrimaryPart.CFrame * CFrame.new(0, 0, -8) or CFrame.new(0, 10, 0)
+    block.Material = Enum.Material.SmoothPlastic
+    block.Color = Color3.fromRGB(255, 255, 255)
+    block.Anchored = true
+    block.CanCollide = true
+    
+    CollectionService:AddTag(block, MY_BLOCK_TAG)
+    block.Parent = workspace
+    
+    -- Если был режим удаления, выключаем его при спавне нового блока
+    if isDeleteModeActive then
+        isDeleteModeActive = false
+        deleteModeBtn.Text = "Удаление: ВЫКЛ"
+        deleteModeBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+    end
+    
+    currentBlock = block
+    currentMode = "Move"
+    updateHandles()
+end)
+
+-- ДВИЖЕНИЕ (Стрелочки / 2)
+moveHandles.MouseButton1Down:Connect(function()
+    if currentBlock then originalCFrame = currentBlock.CFrame end
+end)
+moveHandles.MouseDrag:Connect(function(id, distance)
+    if not currentBlock or not originalCFrame then return end
+    currentBlock.CFrame = originalCFrame * CFrame.new(Vector3.FromNormalId(id) * distance)
+end)
+
+-- РАЗМЕР (Кружочки / 3)
+resizeHandles.MouseButton1Down:Connect(function()
+    if currentBlock then originalSize = currentBlock.Size originalCFrame = currentBlock.CFrame end
+end)
+resizeHandles.MouseDrag:Connect(function(id, distance)
+    if not currentBlock or not originalSize or not originalCFrame then return end
+    local normal = Vector3.FromNormalId(id)
+    local scaleX = originalSize.X + math.abs(normal.X) * distance
+    local scaleY = originalSize.Y + math.abs(normal.Y) * distance
+    local scaleZ = originalSize.Z + math.abs(normal.Z) * distance
+    local newSize = Vector3.new(math.max(0.5, scaleX), math.max(0.5, scaleY), math.max(0.5, scaleZ))
+    currentBlock.Size = newSize
+    currentBlock.CFrame = originalCFrame * CFrame.new(((newSize - originalSize) * normal) / 2)
+end)
+
+-- ПОВОРОТ (Круги / 4)
+rotateHandles.MouseButton1Down:Connect(function()
+    if currentBlock then originalCFrame = currentBlock.CFrame end
+end)
+rotateHandles.MouseDrag:Connect(function(axis, relativeAngle, deltaAngle)
+if not currentBlock or not originalCFrame then return end
+local axisVector = Vector3.new()
+if axis == Enum.Axis.X then axisVector = Vector3.new(1, 0, 0)
+elseif axis == Enum.Axis.Y then axisVector = Vector3.new(0, 1, 0)
+elseif axis == Enum.Axis.Z then axisVector = Vector3.new(0, 0, 1) end
+currentBlock.CFrame = originalCFrame * CFrame.fromAxisAngle(axisVector, relativeAngle)
+end)
