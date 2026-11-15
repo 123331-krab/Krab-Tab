@@ -116,3 +116,6 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
         end)
     end
 end)
+
+_G.KrabHubScripts = _G.KrabHubScripts or {}
+_G.KrabHubScripts["JerkOff"] = функцияОстановки
