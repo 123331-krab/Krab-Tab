@@ -168,3 +168,6 @@ _G.XenoLightningTeleportConnection = inputBeganConnection
 _G.XenoScriptDestroyConnection = destroyConnection
 
 print("[Xeno] Скрипт полностью обновлен! Задержка рывка: 0.025 сек. Нажмите J.")
+
+_G.KrabHubScripts = _G.KrabHubScripts or {}
+_G.KrabHubScripts["Teleport"] = функцияОстановки
