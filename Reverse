@@ -195,4 +195,13 @@ end
 print("Part 2 Loaded! Кнопка Z готова к тесту глобальной ходьбы.")
 
 _G.KrabHubScripts = _G.KrabHubScripts or {}
-_G.KrabHubScripts["Reverse"] = функцияОстановки
+_G.KrabHubScripts["Reverse"] = function()
+    if _G.TimeRewindR6 then
+        _G.TimeRewindR6.CleanUp()
+        if _G.TimeRewindR6.RecordLoop then _G.TimeRewindR6.RecordLoop:Disconnect() end
+        if _G.TimeRewindR6.InputConn then _G.TimeRewindR6.InputConn:Disconnect() end
+        if _G.TimeRewindR6.DeathConn then _G.TimeRewindR6.DeathConn:Disconnect() end
+        _G.TimeRewindR6 = nil
+    end
+end
+
