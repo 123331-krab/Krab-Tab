@@ -157,17 +157,10 @@ inputBeganConnection = UserInputService.InputBegan:Connect(function(input, gameP
 	end
 end)
 
-destroyConnection = UserInputService.InputBegan:Connect(function(input, gameProcessed)
-	if gameProcessed then return end
-	if input.KeyCode == DESTROY_KEY then
-		destroyScript()
-	end
-end)
-
 _G.XenoLightningTeleportConnection = inputBeganConnection
 _G.XenoScriptDestroyConnection = destroyConnection
 
 print("[Xeno] Скрипт полностью обновлен! Задержка рывка: 0.025 сек. Нажмите J.")
 
 _G.KrabHubScripts = _G.KrabHubScripts or {}
-_G.KrabHubScripts["Teleport"] = функцияОстановки
+_G.KrabHubScripts["Teleport"] = destroyScript
