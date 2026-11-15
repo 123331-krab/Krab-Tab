@@ -271,4 +271,11 @@ currentBlock.CFrame = originalCFrame * CFrame.fromAxisAngle(axisVector, relative
 end)
 
 _G.KrabHubScripts = _G.KrabHubScripts or {}
-_G.KrabHubScripts["Btools"] = unloadScript
+_G.KrabHubScripts["Btools"] = function()
+    if inputConnection then inputConnection:Disconnect() end
+    if inputEndedConnection then inputEndedConnection:Disconnect() end
+    if renderConn then renderConn:Disconnect() end
+    if charConn then charConn:Disconnect() end
+    clearHandles()
+    if screenGui then screenGui:Destroy() end
+end
