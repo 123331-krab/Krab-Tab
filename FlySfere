@@ -272,3 +272,6 @@ if player.Character and player.Character:FindFirstChildOfClass("Humanoid") then
     _G.CosmicChaos.DeathConn = player.Character.Humanoid.Died:Connect(function() cc.CleanUp(false) end)
 end
 print("Part 2 Fixed Loaded! Now N toggles infinitely.")
+
+_G.KrabHubScripts = _G.KrabHubScripts or {}
+_G.KrabHubScripts["FlySfere"] = unloadScript
