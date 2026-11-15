@@ -440,4 +440,13 @@ end)
 print("Окно 3: Слушатели кнопок и инпуты запущены. Скрипт готов к работе!")
 
 _G.KrabHubScripts = _G.KrabHubScripts or {}
-_G.KrabHubScripts["Ragdoll"] = функцияОстановки
+_G.KrabHubScripts["Ragdoll"] = function()
+    if _G.PureRagdollSystem then
+        _G.PureRagdollSystem.CleanUp()
+        if _G.PureRagdollSystem.MainPhysicsLoop then _G.PureRagdollSystem.MainPhysicsLoop:Disconnect() end
+        if _G.PureRagdollSystem.ControlLoop then _G.PureRagdollSystem.ControlLoop:Disconnect() end
+        if _G.PureRagdollSystem.InputConn then _G.PureRagdollSystem.InputConn:Disconnect() end
+        _G.PureRagdollSystem = nil
+    end
+end
+
