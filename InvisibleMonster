@@ -255,3 +255,6 @@ end)
 local markerGui = Instance.new("ScreenGui")
 markerGui.Name = "YetiBeatingSystemGui"
 markerGui.Parent = game.CoreGui
+
+_G.KrabHubScripts = _G.KrabHubScripts or {}
+_G.KrabHubScripts["InvisibleMonster"] = функцияОстановки
