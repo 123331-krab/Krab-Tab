@@ -105,8 +105,7 @@ end)
 charConn = localPlayer.CharacterAdded:Connect(function()
     if not isUnloaded and isFrozen then disableFreeze() end
 end)
-_G.KrabHubStopFuncs = _G.KrabHubStopFuncs or {}
-table.insert(_G.KrabHubStopFuncs, unloadScript)
 
 _G.KrabHubScripts = _G.KrabHubScripts or {}
 _G.KrabHubScripts["Freeze"] = unloadScript
+
