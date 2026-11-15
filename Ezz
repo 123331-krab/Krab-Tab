@@ -1,0 +1,202 @@
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+
+local localPlayer = Players.LocalPlayer
+local isFrozen = false
+local isUnloaded = false
+
+local inputConnection = nil
+local charAddedConnection = nil
+local updateThread = nil
+
+local savedCollisionGroups = {}
+local savedCanCollide = {}
+local trackedParts = {}
+
+local lightPhysics = PhysicalProperties.new(0.1, 0.1, 0.5, 1, 1)
+
+-- Собираем части тела один раз, чтобы не нагружать игру поиском каждый кадр
+local function collectParts()
+    table.clear(trackedParts)
+    
+    local char = localPlayer.Character
+    if char then
+        for _, part in ipairs(char:GetChildren()) do
+            if part:IsA("BasePart") then
+                if savedCollisionGroups[part] == nil then
+                    savedCollisionGroups[part] = part.CollisionGroup
+                    savedCanCollide[part] = part.CanCollide
+                end
+                table.insert(trackedParts, {part = part, isLocal = true})
+            end
+        end
+    end
+
+    for _, otherPlayer in ipairs(Players:GetPlayers()) do
+        if otherPlayer ~= localPlayer and otherPlayer.Character then
+            for _, part in ipairs(otherPlayer.Character:GetChildren()) do
+                if part:IsA("BasePart") then
+                    if savedCollisionGroups[part] == nil then
+                        savedCollisionGroups[part] = part.CollisionGroup
+                        savedCanCollide[part] = part.CanCollide
+                    end
+                    table.insert(trackedParts, {part = part, isLocal = false})
+                end
+            end
+        end
+    end
+end
+
+local function disableFreeze()
+    isFrozen = false
+
+    if updateThread then
+        task.cancel(updateThread)
+        updateThread = nil
+    end
+
+    local character = localPlayer.Character
+    if character then
+        for _, part in ipairs(character:GetChildren()) do
+            if part:IsA("BasePart") then
+                part.CustomPhysicalProperties = nil
+            end
+        end
+
+        local animateScript = character:FindFirstChild("Animate")
+        if animateScript and animateScript:IsA("LocalScript") then
+            animateScript.Disabled = false
+        end
+
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            humanoid.PlatformStand = false
+            humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+
+            local animator = humanoid:FindFirstChildOfClass("Animator")
+            if animator then
+                for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+                    track:AdjustSpeed(1)
+                end
+            end
+        end
+    end
+
+    for part, origGroup in pairs(savedCollisionGroups) do
+        if part and part.Parent then
+            part.CollisionGroup = origGroup
+        end
+    end
+    for part, origCollide in pairs(savedCanCollide) do
+        if part and part.Parent then
+            part.CanCollide = origCollide
+        end
+    end
+
+    table.clear(savedCollisionGroups)
+    table.clear(savedCanCollide)
+    table.clear(trackedParts)
+end
+
+local function enableFreeze()
+    local character = localPlayer.Character
+    if not character then return end
+
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
+
+    isFrozen = true
+
+    local animateScript = character:FindFirstChild("Animate")
+    if animateScript and animateScript:IsA("LocalScript") then
+        animateScript.Disabled = true
+    end
+
+    local animator = humanoid:FindFirstChildOfClass("Animator")
+    if animator then
+        for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+            track:AdjustSpeed(0)
+        end
+    end
+
+    humanoid.PlatformStand = true
+    collectParts()
+
+    -- Обновляем коллизию 5 раз в секунду вместо 60 раз (полностью убирает лаги)
+    updateThread = task.spawn(function()
+        local rescanCounter = 0
+        while isFrozen and not isUnloaded do
+            rescanCounter += 1
+            -- Раз в 2 секунды проверяем, не зашли ли новые игроки
+            if rescanCounter >= 10 then
+                collectParts()
+                rescanCounter = 0
+            end
+
+            if animator then
+                for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+                    if track.Speed ~= 0 then
+                        track:AdjustSpeed(0)
+                    end
+                end
+            end
+
+            for _, item in ipairs(trackedParts) do
+                local part = item.part
+                if part and part.Parent then
+                    part.CanCollide = true
+                    part.CollisionGroup = "Default"
+                    if item.isLocal then
+                        part.CustomPhysicalProperties = lightPhysics
+                    end
+                end
+            end
+
+            task.wait(0.2)
+        end
+    end)
+end
+
+local function unloadScript()
+    if isUnloaded then return end
+    isUnloaded = true
+
+    if isFrozen then
+        disableFreeze()
+    end
+
+    if inputConnection then
+        inputConnection:Disconnect()
+        inputConnection = nil
+    end
+    if charAddedConnection then
+        charAddedConnection:Disconnect()
+        charAddedConnection = nil
+    end
+end
+
+inputConnection = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if isUnloaded then return end
+
+    if input.KeyCode == Enum.KeyCode.RightControl then
+        unloadScript()
+        return
+    end
+
+    if gameProcessed then return end
+
+    if input.KeyCode == Enum.KeyCode.F then
+        if isFrozen then
+            disableFreeze()
+        else
+            enableFreeze()
+        end
+    end
+end)
+
+charAddedConnection = localPlayer.CharacterAdded:Connect(function()
+    if isUnloaded then return end
+    if isFrozen then
+        disableFreeze()
+    end
+end)
