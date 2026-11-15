@@ -1,0 +1,110 @@
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+local localPlayer = Players.LocalPlayer
+local isFrozen = false
+local physicsConnection = nil
+
+-- Настройка легкой физики, чтобы вас легко толкали
+local lightPhysics = PhysicalProperties.new(0.1, 0.1, 0.5, 1, 1)
+
+local function toggleFreeze()
+    local character = localPlayer.Character
+    if not character then return end
+    
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    local rootPart = character:FindFirstChild("HumanoidRootPart")
+    if not humanoid or not rootPart then return end
+
+    isFrozen = not isFrozen
+
+    if isFrozen then
+        -- 1. Замораживаем текущую позу (останавливаем анимации)
+        local animator = humanoid:FindFirstChildOfClass("Animator")
+        if animator then
+            for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+                track:AdjustSpeed(0)
+            end
+        end
+
+        -- 2. Переводим в режим физического объекта без управления
+        humanoid.PlatformStand = true
+
+        -- 3. Включаем коллизию себе и всем остальным игрокам для вашего клиента
+        physicsConnection = RunService.Stepped:Connect(function()
+            if not isFrozen or not localPlayer.Character then return end
+
+            -- Включаем коллизию у вашего персонажа и делаем его легким
+            for _, part in ipairs(localPlayer.Character:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = true
+                    part.Anchored = false
+                    part.CustomPhysicalProperties = lightPhysics
+                end
+            end
+
+            -- Включаем коллизию у всех остальных игроков на сервере (локально для вас)
+            for _, otherPlayer in ipairs(Players:GetPlayers()) do
+                if otherPlayer ~= localPlayer and otherPlayer.Character then
+                    for _, part in ipairs(otherPlayer.Character:GetDescendants()) do
+                        if part:IsA("BasePart") then
+                            part.CanCollide = true
+                        end
+                    end
+                end
+            end
+        end)
+
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "Заморозка и толкание",
+            Text = "Включено (F — выключить)",
+            Duration = 2
+        })
+    else
+        -- Отключаем цикл физики
+        if physicsConnection then
+            physicsConnection:Disconnect()
+            physicsConnection = nil
+        end
+
+        -- Возвращаем стандартные физические свойства вашему персонажу
+        for _, part in ipairs(character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CustomPhysicalProperties = nil
+            end
+        end
+
+        -- Возвращаем управление и анимации
+        humanoid.PlatformStand = false
+        local animator = humanoid:FindFirstChildOfClass("Animator")
+        if animator then
+            for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+                track:AdjustSpeed(1)
+            end
+        end
+
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "Заморозка и толкание",
+            Text = "Выключено",
+            Duration = 2
+        })
+    end
+end
+
+-- Активация на клавишу F
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.F then
+        toggleFreeze()
+    end
+end)
+
+-- Сброс при смерти
+localPlayer.CharacterAdded:Connect(function()
+    isFrozen = false
+    if physicsConnection then
+        physicsConnection:Disconnect()
+        physicsConnection = nil
+    end
+end)
