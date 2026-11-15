@@ -193,3 +193,6 @@ if player.Character and player.Character:FindFirstChildOfClass("Humanoid") then
     _G.TimeRewindR6.DeathConn = player.Character.Humanoid.Died:Connect(OnDeath)
 end
 print("Part 2 Loaded! Кнопка Z готова к тесту глобальной ходьбы.")
+
+_G.KrabHubScripts = _G.KrabHubScripts or {}
+_G.KrabHubScripts["Reverse"] = функцияОстановки
