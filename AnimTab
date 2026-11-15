@@ -1,0 +1,3 @@
+-- noting
+_G.KrabHubScripts = _G.KrabHubScripts or {}
+_G.KrabHubScripts["AnimTab"] = unloadScript
