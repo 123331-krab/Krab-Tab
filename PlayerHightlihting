@@ -97,4 +97,15 @@ UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
 end)
 
 _G.KrabHubScripts = _G.KrabHubScripts or {}
-_G.KrabHubScripts["PlayerHightlihting"] = функцияОстановки
+_G.KrabHubScripts["PlayerHightlihting"] = function()
+    espActive = false
+    if inputConn then inputConn:Disconnect() end
+    if playerAddedConn then playerAddedConn:Disconnect() end
+    if playerRemovingConn then playerRemovingConn:Disconnect() end
+    for _, conn in pairs(connections) do
+        if conn then conn:Disconnect() end
+    end
+    table.clear(connections)
+    for _, p in ipairs(Players:GetPlayers()) do removeHighlight(p) end
+end
+
