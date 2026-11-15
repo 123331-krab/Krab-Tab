@@ -1,0 +1,274 @@
+-- Мягкий сброс только полетных переменных прошлой сессии
+if _G.CosmicChaos and _G.CosmicChaos.CleanUp then
+    pcall(function() _G.CosmicChaos.CleanUp(false) end)
+end
+
+_G.CosmicChaos = _G.CosmicChaos or {}
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local camera = workspace.CurrentCamera
+local player = Players.LocalPlayer
+
+-- === НАСТРОЙКИ КОСМИЧЕСКОГО ХАОСА ===
+_G.CosmicChaos.Settings = {
+    ACTIVATE_KEY = Enum.KeyCode.N, 
+    FAST_SWITCH_KEY = Enum.KeyCode.M,
+    BOOST_KEY = Enum.KeyCode.B,   
+    SLOW_KEY = Enum.KeyCode.V,    
+    DISTANCE_MIN = 10,
+    DISTANCE_MAX = 50,
+    START_SPEED = 1.0,
+    MAX_SPEED = 1260,
+    ACCELERATION_TIME = 420,
+    PULL_SPEED = 0.15
+}
+local cfg = _G.CosmicChaos.Settings
+
+_G.CosmicChaos.Vars = _G.CosmicChaos.Vars or {
+    targetChar = nil, timeElapsed = 0, bonusTime = 0, lastTick = 0,
+    active = false, isPulling = false, currentDistance = 10,
+    startPullPos = Vector3.new(0,0,0), connections = {}, buzzSound = nil,
+    autoCarousel = false, lastCarouselSwitch = 0, 
+    FAST_CAROUSEL_DELAY = 0.3, 
+    randomAxisX = 0, randomAxisY = 0, targetAxisX = math.random(5, 25),
+    targetAxisY = math.random(-180, 180), lastChange = 0
+}
+local v = _G.CosmicChaos.Vars
+
+function _G.CosmicChaos.CleanUp(shouldTeleportToHead)
+    v.active = false
+    v.isPulling = false
+    v.autoCarousel = false
+    local oldTarget = v.targetChar
+    v.targetChar = nil
+    v.timeElapsed = 0
+    v.bonusTime = 0
+    v.currentDistance = cfg.DISTANCE_MIN
+    pcall(function()
+        if v.buzzSound then v.buzzSound:Destroy() v.buzzSound = nil end
+        camera.CameraSubject = player.Character and player.Character:FindFirstChildOfClass("Humanoid") or nil
+        local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+        if root then
+            root.Velocity = Vector3.new(0, 0, 0)
+            if shouldTeleportToHead and oldTarget and oldTarget:FindFirstChild("Head") then
+                root.CFrame = oldTarget.Head.CFrame * CFrame.new(0, 10, 0)
+            end
+        end
+        if player.Character and player.Character:FindFirstChildOfClass("Humanoid") then
+            player.Character:FindFirstChildOfClass("Humanoid").PlatformStand = false
+        end
+    end)
+    -- ИСПРАВЛЕНИЕ: Мы НЕ удаляем connections тут, чтобы кнопки не ломались после выключения!
+end
+
+-- Перезапуск Heartbeat-цикла, если он уже был
+if _G.CosmicChaos.MainLoop then 
+    pcall(function() _G.CosmicChaos.MainLoop:Disconnect() end) 
+end
+
+_G.CosmicChaos.MainLoop = RunService.Heartbeat:Connect(function(dt)
+    local char = player.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.Health <= 0 or not root or not char.Parent then
+        _G.CosmicChaos.CleanUp(false); return
+    end
+    
+    if v.active and v.autoCarousel and tick() - v.lastCarouselSwitch > v.FAST_CAROUSEL_DELAY then
+        local targets = _G.CosmicChaos.GetSortedTargets()
+        if #targets > 0 then
+            local nextIndex = 1
+            if v.targetChar then
+                for i, t in ipairs(targets) do
+                    if t == v.targetChar then nextIndex = i + 1 break end
+                end
+            end
+            if nextIndex > #targets then nextIndex = 1 end
+            v.lastCarouselSwitch = tick()
+            _G.CosmicChaos.SwitchToTarget(targets[nextIndex])
+        end
+    end
+    
+    if v.active and v.targetChar and v.targetChar:FindFirstChild("HumanoidRootPart") then
+        local targetRoot = v.targetChar.HumanoidRootPart
+        hum.PlatformStand = true
+        pcall(function() if v.targetChar:FindFirstChild("Head") and camera.CameraSubject ~= v.targetChar.Head then camera.CameraSubject = v.targetChar.Head end end)
+        
+        local isBoosting = UserInputService:IsKeyDown(cfg.BOOST_KEY)
+        local isSlowing = UserInputService:IsKeyDown(cfg.SLOW_KEY)
+        local timeDelta = tick() - v.lastTick; v.lastTick = tick()
+        if isBoosting then v.bonusTime = math.clamp(v.bonusTime + (timeDelta * 4), 0, cfg.ACCELERATION_TIME)
+        elseif isSlowing then v.bonusTime = math.clamp(v.bonusTime - (timeDelta * 4), 0, cfg.ACCELERATION_TIME) end
+        
+        if UserInputService:IsKeyDown(Enum.KeyCode.Up) then
+            v.currentDistance = math.min(cfg.DISTANCE_MAX, v.currentDistance + (25 * dt))
+        elseif UserInputService:IsKeyDown(Enum.KeyCode.Down) then
+            v.currentDistance = math.max(cfg.DISTANCE_MIN, v.currentDistance - (25 * dt))
+        end
+        
+        local progress = math.clamp(v.bonusTime / cfg.ACCELERATION_TIME, 0, 1)
+        local currentSpeed = cfg.START_SPEED + (cfg.MAX_SPEED - cfg.START_SPEED) * progress
+        v.timeElapsed = v.timeElapsed + (currentSpeed * dt * 0.1)
+        
+        if tick() - v.lastChange > math.random(10, 20)/10 then
+            v.targetAxisX = math.random(5, 25); v.targetAxisY = math.random(-180, 180); v.lastChange = tick()
+        end
+        v.randomAxisX = v.randomAxisX + (v.targetAxisX - v.randomAxisX) * 0.02 
+        v.randomAxisY = v.randomAxisY + (v.targetAxisY - v.randomAxisY) * 0.02
+        local orbitCFrame = CFrame.Angles(0, v.timeElapsed, 0) * CFrame.Angles(math.rad(v.randomAxisX), 0, math.rad(v.randomAxisY)) * CFrame.new(0, 0, v.currentDistance)
+        
+        local targetOrbitPos = (targetRoot.Position + Vector3.new(0, 3.25, 0)) + orbitCFrame.Position
+        
+        local lowestAllowedY = targetRoot.Position.Y - 1.5
+        if targetOrbitPos.Y < lowestAllowedY then
+            targetOrbitPos = Vector3.new(targetOrbitPos.X, lowestAllowedY, targetOrbitPos.Z)
+        end
+        
+        local finalPos = targetOrbitPos
+        if v.isPulling then
+            v.startPullPos = v.startPullPos:Lerp(targetOrbitPos, cfg.PULL_SPEED); finalPos = v.startPullPos
+            if (v.startPullPos - targetOrbitPos).Magnitude < 1.5 then v.isPulling = false end
+        end
+        root.CFrame = CFrame.lookAt(finalPos, targetRoot.Position) * CFrame.Angles(0, 0, v.timeElapsed * 0.2)
+        root.Velocity = root.CFrame.LookVector * currentSpeed
+    else v.lastTick = tick() end
+end)
+
+function _G.CosmicChaos.GetSortedTargets()
+    local available = {}
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChild("Head") then
+            table.insert(available, p.Character)
+        end
+    end
+    table.sort(available, function(a, b) return a.Name < b.Name end)
+    return available
+end
+
+function _G.CosmicChaos.SwitchToTarget(model)
+    if not model or not player.Character then return end
+    local myRoot = player.Character:FindFirstChild("HumanoidRootPart")
+    if myRoot then
+        v.targetChar = model
+        v.timeElapsed = 0; v.lastTick = tick(); v.lastChange = tick()
+        v.randomAxisX = math.random(5, 20); v.randomAxisY = math.random(-45, 45)
+        v.startPullPos = myRoot.Position; v.isPulling = true; v.active = true
+        pcall(function()
+            if model:FindFirstChild("Head") then
+                camera.CameraSubject = model.Head
+                if not v.buzzSound or v.buzzSound.Parent ~= model.Head then
+                    if v.buzzSound then v.buzzSound:Destroy() end
+                    v.buzzSound = Instance.new("Sound")
+                    v.buzzSound.SoundId = "rbxasset://sounds/Swoosh.mp3"
+                    v.buzzSound.Looped = true; v.buzzSound.Volume = 0; v.buzzSound.Parent = model.Head; v.buzzSound:Play()
+                end
+            end
+        end)
+    end
+end
+print("Part 1 Fixed Loaded!")
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local player = Players.LocalPlayer
+local mouse = player:GetMouse()
+
+local cc = _G.CosmicChaos
+if not cc then print("Error: Please run Part 1 first!") return end
+local v = cc.Vars
+local cfg = cc.Settings
+
+local function GetClosestTarget()
+    local targets = cc.GetSortedTargets()
+    local closestChar = nil
+    local minDistance = math.huge
+    local myRoot = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+    if not myRoot then return nil end
+    for _, char in ipairs(targets) do
+        local tRoot = char:FindFirstChild("HumanoidRootPart")
+        if tRoot then
+            local dist = (myRoot.Position - tRoot.Position).Magnitude
+            if dist < minDistance then minDistance = dist; closestChar = char end
+        end
+    end
+    return closestChar
+end
+
+local function CycleTarget(direction)
+    local targets = cc.GetSortedTargets()
+    if #targets == 0 then return nil end
+    if #targets == 1 then return targets end
+    
+    local currentIndex = 1
+    if v.targetChar then
+        local targetPlayer = Players:GetPlayerFromCharacter(v.targetChar)
+        if targetPlayer then
+            for i, char in ipairs(targets) do
+                local p = Players:GetPlayerFromCharacter(char)
+                if p and p.UserId == targetPlayer.UserId then currentIndex = i break end
+            end
+        end
+    end
+    
+    local nextIndex = currentIndex + direction
+    if nextIndex > #targets then nextIndex = 1 end
+    if nextIndex < 1 then nextIndex = #targets end
+    
+    return targets[nextIndex]
+end
+
+-- Перезапускаем инпут-коннект, чтобы старые не плодились в памяти Xeno
+if _G.CosmicChaos.InputConn then 
+    pcall(function() _G.CosmicChaos.InputConn:Disconnect() end) 
+end
+
+_G.CosmicChaos.InputConn = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if input.KeyCode == cfg.ACTIVATE_KEY then
+        if v.active then 
+            cc.CleanUp(true)
+        else
+            local foundTarget = false
+            local targetMesh = mouse.Target
+            if targetMesh and targetMesh.Parent then
+                local model = targetMesh.Parent
+                if model:IsA("Accessory") then model = model.Parent end
+                local clickedPlayer = Players:GetPlayerFromCharacter(model)
+                if clickedPlayer and clickedPlayer ~= player then
+                    cc.SwitchToTarget(model); foundTarget = true
+                end
+            end
+            if not foundTarget then
+                local closest = GetClosestTarget()
+                if closest then cc.SwitchToTarget(closest) end
+            end
+        end
+    end
+
+    if input.KeyCode == Enum.KeyCode.Right and v.active then
+        v.autoCarousel = false 
+        local nextTarget = CycleTarget(1)
+        if nextTarget then cc.SwitchToTarget(nextTarget) end
+    end
+
+    if input.KeyCode == Enum.KeyCode.Left and v.active then
+        v.autoCarousel = false 
+        local prevTarget = CycleTarget(-1)
+        if prevTarget then cc.SwitchToTarget(prevTarget) end
+    end
+
+    if input.KeyCode == cfg.FAST_SWITCH_KEY and v.active then
+        v.autoCarousel = not v.autoCarousel
+        if v.autoCarousel then
+            v.lastCarouselSwitch = tick()
+            local targets = cc.GetSortedTargets()
+            local newTarget = #targets > 0 and targets[math.random(1, #targets)] or nil
+            if newTarget then cc.SwitchToTarget(newTarget) end
+        end
+    end
+end)
+
+if player.Character and player.Character:FindFirstChildOfClass("Humanoid") then
+    pcall(function() if _G.CosmicChaos.DeathConn then _G.CosmicChaos.DeathConn:Disconnect() end end)
+    _G.CosmicChaos.DeathConn = player.Character.Humanoid.Died:Connect(function() cc.CleanUp(false) end)
+end
+print("Part 2 Fixed Loaded! Now N toggles infinitely.")
