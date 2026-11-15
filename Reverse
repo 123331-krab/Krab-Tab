@@ -1,0 +1,195 @@
+_G.TimeRewindR6 = _G.TimeRewindR6 or {}
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local player = Players.LocalPlayer
+
+-- === НАСТРОЙКИ СКОРОСТИ И КД ===
+_G.TimeRewindR6.REWIND_KEY = Enum.KeyCode.Z 
+_G.TimeRewindR6.MAX_RECORD_TIME = 60       -- Память 1 минута
+_G.TimeRewindR6.SPEED_MULTIPLIER = 5      -- В 5 раз быстрее
+_G.TimeRewindR6.COOLDOWN_TIME = 5 
+_G.TimeRewindR6.IsRewinding = false
+_G.TimeRewindR6.LastRewindTime = 0 
+
+_G.TimeRewindR6.History = _G.TimeRewindR6.History or {}
+_G.TimeRewindR6.Connections = _G.TimeRewindR6.Connections or {}
+local history = _G.TimeRewindR6.History
+
+-- Таблица для сохранения оригинальных базовых C0 суставов R6
+local defaultC0s = {}
+
+function _G.TimeRewindR6.CleanUp()
+    _G.TimeRewindR6.IsRewinding = false
+    _G.TimeRewindR6.LastRewindTime = tick() 
+    
+    local char = player.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if hum then hum.PlatformStand = false end
+    
+    -- ВОЗВРАЩАЕМ ВСЕ СУСТАВЫ В ДЕФОЛТ ДЛЯ ВСЕГО СЕРВЕРА
+    for m6d, originalC0 in pairs(defaultC0s) do
+        if m6d and m6d.Parent then 
+            pcall(function() 
+                m6d.C0 = originalC0 
+                m6d.Transform = CFrame.new() -- Очищаем локальное смещение
+            end) 
+        end
+    end
+    table.clear(defaultC0s)
+    
+    if char then
+        for _, part in ipairs(char:GetChildren()) do
+            if part:IsA("BasePart") then part.CanCollide = true end
+        end
+    end
+    
+    if _G.TimeRewindR6.SteppedLoop then
+        pcall(function() _G.TimeRewindR6.SteppedLoop:Disconnect() end)
+        _G.TimeRewindR6.SteppedLoop = nil
+    end
+    
+    table.clear(history) 
+    print("Временная петля завершена. Анимации возвращены в норму для всех.")
+end
+
+-- Вечный цикл записи (Heartbeat)
+if _G.TimeRewindR6.RecordLoop then
+    pcall(function() _G.TimeRewindR6.RecordLoop:Disconnect() end)
+end
+
+_G.TimeRewindR6.RecordLoop = RunService.Heartbeat:Connect(function()
+    if _G.TimeRewindR6.IsRewinding then return end
+    local char = player.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if not root or not hum or hum.Health <= 0 then return end
+    
+    -- ИСПРАВЛЕНИЕ: Записываем C0 * Transform, чтобы поймать саму анимацию ходьбы!
+    local jointsState = {}
+    if char:FindFirstChild("Torso") then
+        for _, child in ipairs(char.Torso:GetChildren()) do
+            if child:IsA("Motor6D") then 
+                jointsState[child] = child.C0 * child.Transform
+                if not defaultC0s[child] then defaultC0s[child] = child.C0 end
+            end
+        end
+    end
+    if root:FindFirstChild("RootJoint") then 
+        jointsState[root.RootJoint] = root.RootJoint.C0 * root.RootJoint.Transform
+        if not defaultC0s[root.RootJoint] then defaultC0s[root.RootJoint] = root.RootJoint.C0 end
+    end
+    
+    table.insert(history, {
+        tick = tick(),
+        rootCFrame = root.CFrame,
+        joints = jointsState
+    })
+    
+    local threshold = tick() - _G.TimeRewindR6.MAX_RECORD_TIME
+    while #history > 0 and history.tick < threshold do table.remove(history, 1) end
+end)
+
+-- Глобальный цикл отмотки (Stepped) - Отправляем скомпилированную ходьбу на сервер
+function _G.TimeRewindR6.StartSteppedLoop()
+    if _G.TimeRewindR6.SteppedLoop then pcall(function() _G.TimeRewindR6.SteppedLoop:Disconnect() end) end
+    
+    _G.TimeRewindR6.SteppedLoop = RunService.Stepped:Connect(function(_, dt)
+        if not _G.TimeRewindR6.IsRewinding then return end
+        local char = player.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if not root or not hum or hum.Health <= 0 then _G.TimeRewindR6.CleanUp() return end
+        
+        hum.PlatformStand = false 
+        
+        local framesToRewind = math.round(dt * 60 * _G.TimeRewindR6.SPEED_MULTIPLIER)
+        if framesToRewind < 1 then framesToRewind = 1 end
+        
+        if #history > 0 then
+            local targetFrame = nil
+            for i = 1, framesToRewind do
+                if #history > 0 then targetFrame = table.remove(history, #history) end
+            end
+            
+            if targetFrame then
+                root.CFrame = targetFrame.rootCFrame
+                root.Velocity = Vector3.new()
+                
+                for _, part in ipairs(char:GetChildren()) do
+                    if part:IsA("BasePart") then part.CanCollide = false end
+                end
+                
+                -- ЖЕСТКАЯ ПЕРЕЗАПИСЬ: Передаем серверу C0 с вшитой ходьбой из прошлого!
+                for joint, savedCombinedCFrame in pairs(targetFrame.joints) do
+                    if joint and joint.Parent then
+                        joint.C0 = savedCombinedCFrame
+                        joint.Transform = CFrame.new() -- Обнуляем локальный трансформ, чтобы не дергало
+                    end
+                end
+            end
+        else
+            _G.TimeRewindR6.CleanUp()
+        end
+    end)
+end
+
+print("Part 1 Loaded! Глобальный реверс ходьбы R6 исправлен.")
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local player = Players.LocalPlayer
+
+local trs = _G.TimeRewindR6
+if not trs then print("Error: Please run Part 1 first!") return end
+
+if _G.TimeRewindR6.InputConn then pcall(function() _G.TimeRewindR6.InputConn:Disconnect() end) end
+
+_G.TimeRewindR6.InputConn = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    
+    if input.KeyCode == trs.REWIND_KEY then
+        if not trs.IsRewinding then
+            local timePassed = tick() - trs.LastRewindTime
+            if timePassed < trs.COOLDOWN_TIME then
+                local timeLeft = math.ceil(trs.COOLDOWN_TIME - timePassed)
+                print("⏳ Перезарядка! Подожди еще " .. tostring(timeLeft) .. " сек.")
+                return
+            end
+            
+            if #trs.History > 5 then
+                pcall(function()
+                    local char = player.Character
+                    local hum = char and char:FindFirstChildOfClass("Humanoid")
+                    local animator = hum and hum:FindFirstChildOfClass("Animator")
+                    if animator then
+                        -- Жестко выключаем локальные треки, давая приоритет нашему серверному C0
+                        for _, track in ipairs(animator:GetPlayingAnimationTracks()) do track:Stop(0) end
+                    end
+                end)
+                
+                trs.IsRewinding = true
+                trs.StartSteppedLoop() 
+                print("⏳ СЕРВЕРНЫЙ РЕВЕРС ХОДЬБЫ: Петля времени запущена!")
+            end
+        else
+            trs.CleanUp() -- Досрочная остановка
+        end
+    end
+end)
+
+local function OnDeath()
+    if _G.TimeRewindR6 then
+        pcall(function()
+            if _G.TimeRewindR6.RecordLoop then _G.TimeRewindR6.RecordLoop:Disconnect() end
+            if _G.TimeRewindR6.SteppedLoop then _G.TimeRewindR6.SteppedLoop:Disconnect() end
+            if _G.TimeRewindR6.InputConn then _G.TimeRewindR6.InputConn:Disconnect() end
+        end)
+    end
+    if _G.TimeRewindR6.DeathConn then pcall(function() _G.TimeRewindR6.DeathConn:Disconnect() end) _G.TimeRewindR6.DeathConn = nil end
+    print("Скрипт реверса полностью стерт после смерти.")
+end
+
+if player.Character and player.Character:FindFirstChildOfClass("Humanoid") then
+    if _G.TimeRewindR6.DeathConn then pcall(function() _G.TimeRewindR6.DeathConn:Disconnect() end) end
+    _G.TimeRewindR6.DeathConn = player.Character.Humanoid.Died:Connect(OnDeath)
+end
+print("Part 2 Loaded! Кнопка Z готова к тесту глобальной ходьбы.")
