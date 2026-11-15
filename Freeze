@@ -1,121 +1,217 @@
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
 local localPlayer = Players.LocalPlayer
 local isFrozen, isUnloaded = false, false
 local savedGroups, savedCollide, savedJoints = {}, {}, {}
-local lightPhys = PhysicalProperties.new(0.15, 0.2, 0.5, 1, 1)
-local updateThread, inputConn, charConn
+local savedWalkSpeed, savedJumpPower, savedJumpHeight
+
+-- Низкое трение (0.02) и высокий вес трения (100) для скольжения как по льду
+local icePhys = PhysicalProperties.new(0.15, 0.02, 0.3, 100, 1)
+
+local updateThread, poseConn, inputConn, charConn
+
 local function setCollision(enable)
-    local char = localPlayer.Character
-    if char then
-        for _, part in ipairs(char:GetChildren()) do
-            if part:IsA("BasePart") then
-                if enable then
-                    if savedGroups[part] == nil then
-                        savedGroups[part] = part.CollisionGroup
-                        savedCollide[part] = part.CanCollide
-                    end
-                    part.CanCollide = true
-                    part.CollisionGroup = "Default"
-                    part.CustomPhysicalProperties = lightPhys
-                else
-                    if savedGroups[part] ~= nil then part.CollisionGroup = savedGroups[part] end
-                    if savedCollide[part] ~= nil then part.CanCollide = savedCollide[part] end
-                    part.CustomPhysicalProperties = nil
-                end
-            end
-        end
-    end
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= localPlayer and plr.Character then
-            for _, part in ipairs(plr.Character:GetChildren()) do
-                if part:IsA("BasePart") then
-                    if enable then
-                        if savedGroups[part] == nil then
-                            savedGroups[part] = part.CollisionGroup
-                            savedCollide[part] = part.CanCollide
-                        end
-                        part.CanCollide = true
-                        part.CollisionGroup = "Default"
-                    else
-                        if savedGroups[part] ~= nil then part.CollisionGroup = savedGroups[part] end
-                        if savedCollide[part] ~= nil then part.CanCollide = savedCollide[part] end
-                    end
-                end
-            end
-        end
-    end
-    if not enable then
-        table.clear(savedGroups)
-        table.clear(savedCollide)
-    end
+	local char = localPlayer.Character
+	if char then
+		for _, part in ipairs(char:GetChildren()) do
+			if part:IsA("BasePart") then
+				if enable then
+					if savedGroups[part] == nil then
+						savedGroups[part] = part.CollisionGroup
+						savedCollide[part] = part.CanCollide
+					end
+					part.CanCollide = true
+					part.CollisionGroup = "Default"
+					part.CustomPhysicalProperties = icePhys
+				else
+					if savedGroups[part] ~= nil then
+						part.CollisionGroup = savedGroups[part]
+					end
+					if savedCollide[part] ~= nil then
+						part.CanCollide = savedCollide[part]
+					end
+					part.CustomPhysicalProperties = nil
+				end
+			end
+		end
+	end
+
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr ~= localPlayer and plr.Character then
+			for _, part in ipairs(plr.Character:GetChildren()) do
+				if part:IsA("BasePart") then
+					if enable then
+						if savedGroups[part] == nil then
+							savedGroups[part] = part.CollisionGroup
+							savedCollide[part] = part.CanCollide
+						end
+						part.CanCollide = true
+						part.CollisionGroup = "Default"
+					else
+						if savedGroups[part] ~= nil then
+							part.CollisionGroup = savedGroups[part]
+						end
+						if savedCollide[part] ~= nil then
+							part.CanCollide = savedCollide[part]
+						end
+					end
+				end
+			end
+		end
+	end
+
+	if not enable then
+		table.clear(savedGroups)
+		table.clear(savedCollide)
+	end
 end
+
 local function disableFreeze()
-    isFrozen = false
-    if updateThread then task.cancel(updateThread) updateThread = nil end
-    setCollision(false)
-    local char = localPlayer.Character
-    if char then
-        for joint, origC0 in pairs(savedJoints) do
-            if joint and joint.Parent then joint.C0 = origC0 end
-        end
-        table.clear(savedJoints)
-        local anim = char:FindFirstChild("Animate")
-        if anim and anim:IsA("LocalScript") then anim.Disabled = false end
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        if hum then
-            hum.AutoRotate = true
-            local animator = hum:FindFirstChildOfClass("Animator")
-            if animator then
-                for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
-                    track:AdjustSpeed(1)
-                end
-            end
-        end
-    end
+	isFrozen = false
+
+	if updateThread then
+		task.cancel(updateThread)
+		updateThread = nil
+	end
+	if poseConn then
+		poseConn:Disconnect()
+		poseConn = nil
+	end
+
+	setCollision(false)
+
+	local char = localPlayer.Character
+	if char then
+		for joint, origC0 in pairs(savedJoints) do
+			if joint and joint.Parent then
+				joint.C0 = origC0
+			end
+		end
+		table.clear(savedJoints)
+
+		local anim = char:FindFirstChild("Animate")
+		if anim and anim:IsA("LocalScript") then
+			anim.Disabled = false
+		end
+
+		local hum = char:FindFirstChildOfClass("Humanoid")
+		if hum then
+			hum.PlatformStand = false
+			hum.AutoRotate = true
+			if savedWalkSpeed then hum.WalkSpeed = savedWalkSpeed end
+			if savedJumpPower then hum.JumpPower = savedJumpPower end
+			if savedJumpHeight then hum.JumpHeight = savedJumpHeight end
+
+			hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+
+			local animator = hum:FindFirstChildOfClass("Animator")
+			if animator then
+				for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+					track:AdjustSpeed(1)
+				end
+			end
+		end
+	end
 end
+
 local function enableFreeze()
-    local char = localPlayer.Character
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    if not hum then return end
-    isFrozen = true
-    hum.AutoRotate = false
-    table.clear(savedJoints)
-    for _, obj in ipairs(char:GetDescendants()) do
-        if obj:IsA("Motor6D") then
-            savedJoints[obj] = obj.C0
-            obj.C0 = obj.C0 * obj.Transform
-        end
-    end
-    local anim = char:FindFirstChild("Animate")
-    if anim and anim:IsA("LocalScript") then anim.Disabled = true end
-    local animator = hum:FindFirstChildOfClass("Animator")
-    if animator then
-        for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
-            track:AdjustSpeed(0)
-        end
-    end
-    setCollision(true)
-    updateThread = task.spawn(function()
-        while isFrozen and not isUnloaded do
-            task.wait(0.2)
-            if isFrozen and not isUnloaded then setCollision(true) end
-        end
-    end)
+	local char = localPlayer.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	if not hum then return end
+
+	isFrozen = true
+
+	savedWalkSpeed = hum.WalkSpeed
+	savedJumpPower = hum.JumpPower
+	savedJumpHeight = hum.JumpHeight
+
+	hum.WalkSpeed = 0
+	hum.JumpPower = 0
+	hum.JumpHeight = 0
+	hum.AutoRotate = false
+	hum.PlatformStand = true
+
+	table.clear(savedJoints)
+	for _, obj in ipairs(char:GetDescendants()) do
+		if obj:IsA("Motor6D") then
+			savedJoints[obj] = obj.C0
+			obj.C0 = obj.C0 * obj.Transform
+			obj.Transform = CFrame.new()
+		end
+	end
+
+	local anim = char:FindFirstChild("Animate")
+	if anim and anim:IsA("LocalScript") then
+		anim.Disabled = true
+	end
+
+	local animator = hum:FindFirstChildOfClass("Animator")
+	if animator then
+		for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+			track:AdjustSpeed(0)
+		end
+	end
+
+	setCollision(true)
+
+	poseConn = RunService.Stepped:Connect(function()
+		if not isFrozen or isUnloaded then return end
+		if hum and hum.Parent then
+			hum.PlatformStand = true
+		end
+		for joint, _ in pairs(savedJoints) do
+			if joint and joint.Parent then
+				joint.Transform = CFrame.new()
+			end
+		end
+	end)
+
+	updateThread = task.spawn(function()
+		while isFrozen and not isUnloaded do
+			task.wait(0.2)
+			if isFrozen and not isUnloaded then
+				setCollision(true)
+			end
+		end
+	end)
 end
+
 local function unloadScript()
-    if isUnloaded then return end
-    isUnloaded = true
-    if isFrozen then disableFreeze() end
-    if inputConn then inputConn:Disconnect() end
-    if charConn then charConn:Disconnect() end
+	if isUnloaded then return end
+	isUnloaded = true
+	if isFrozen then
+		disableFreeze()
+	end
+	if inputConn then
+		inputConn:Disconnect()
+	end
+	if charConn then
+		charConn:Disconnect()
+	end
 end
+
 inputConn = UIS.InputBegan:Connect(function(input, gameProcessed)
-    if isUnloaded or gameProcessed then return end
-    if input.KeyCode == Enum.KeyCode.F then
-        if isFrozen then disableFreeze() else enableFreeze() end
-    end
+	if isUnloaded or gameProcessed then return end
+	if input.KeyCode == Enum.KeyCode.F then
+		if isFrozen then
+			disableFreeze()
+		else
+			enableFreeze()
+		end
+	end
 end)
+
+charConn = localPlayer.CharacterAdded:Connect(function()
+	if not isUnloaded and isFrozen then
+		disableFreeze()
+	end
+end)
+
+_G.KrabHubScripts = _G.KrabHubScripts or {}
+_G.KrabHubScripts["Freeze"] = unloadScript
+
 charConn = localPlayer.CharacterAdded:Connect(function()
     if not isUnloaded and isFrozen then disableFreeze() end
 end)
