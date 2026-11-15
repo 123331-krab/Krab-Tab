@@ -274,4 +274,12 @@ end
 print("Part 2 Fixed Loaded! Now N toggles infinitely.")
 
 _G.KrabHubScripts = _G.KrabHubScripts or {}
-_G.KrabHubScripts["FlySfere"] = unloadScript
+_G.KrabHubScripts["FlySfere"] = function()
+    if _G.CosmicChaos then
+        if _G.CosmicChaos.CleanUp then pcall(function() _G.CosmicChaos.CleanUp(false) end) end
+        if _G.CosmicChaos.MainLoop then _G.CosmicChaos.MainLoop:Disconnect() end
+        if _G.CosmicChaos.InputConn then _G.CosmicChaos.InputConn:Disconnect() end
+        if _G.CosmicChaos.DeathConn then _G.CosmicChaos.DeathConn:Disconnect() end
+        _G.CosmicChaos = nil
+    end
+end
