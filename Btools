@@ -269,3 +269,6 @@ elseif axis == Enum.Axis.Y then axisVector = Vector3.new(0, 1, 0)
 elseif axis == Enum.Axis.Z then axisVector = Vector3.new(0, 0, 1) end
 currentBlock.CFrame = originalCFrame * CFrame.fromAxisAngle(axisVector, relativeAngle)
 end)
+
+_G.KrabHubScripts = _G.KrabHubScripts or {}
+_G.KrabHubScripts["Btools"] = unloadScript
