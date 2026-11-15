@@ -1,0 +1,440 @@
+_G.PureRagdollSystem = _G.PureRagdollSystem or {}
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+
+-- === ГЛОБАЛЬНЫЕ НАСТРОЙКИ (ВАШ ОРИГИНАЛ + НОВЫЕ РЕЖИМЫ) ===
+_G.PureRagdollSystem.Active = false      
+_G.PureRagdollSystem.Hovering = false    
+_G.PureRagdollSystem.PuppetMode = false  
+_G.PureRagdollSystem.CrucifixMode = false 
+
+_G.PureRagdollSystem.Height = 3
+_G.PureRagdollSystem.Yaw = 0
+_G.PureRagdollSystem.Speed = 0
+_G.PureRagdollSystem.HoverTime = 0
+_G.PureRagdollSystem.TakeoffProgress = 0
+
+_G.PureRagdollSystem.MAX_HOVER_SPEED = 20
+_G.PureRagdollSystem.CAR_TURN_SPEED = 1.2    
+_G.PureRagdollSystem.ACCELERATION = 0.6      
+
+_G.PureRagdollSystem.ControlBlock = nil
+_G.PureRagdollSystem.Rope = nil
+_G.PureRagdollSystem.AttachmentAnker = nil
+_G.PureRagdollSystem.AttachmentPlayer = nil
+_G.PureRagdollSystem.CurrentRopeLength = 16 
+
+_G.PureRagdollSystem.CrucifixBlocks = {}
+_G.PureRagdollSystem.CrucifixRopes = {}
+_G.PureRagdollSystem.CrucifixTargetLength = 8 
+
+-- Мягкий сброс и очистка всех объектов физики
+function _G.PureRagdollSystem.CleanUp()
+    _G.PureRagdollSystem.Active = false
+    _G.PureRagdollSystem.Hovering = false
+    _G.PureRagdollSystem.PuppetMode = false
+    _G.PureRagdollSystem.CrucifixMode = false
+    _G.PureRagdollSystem.Speed = 0
+    _G.PureRagdollSystem.HoverTime = 0
+    _G.PureRagdollSystem.TakeoffProgress = 0
+    _G.PureRagdollSystem.CrucifixTargetLength = 8
+    
+    pcall(function()
+        if _G.PureRagdollSystem.ControlBlock then _G.PureRagdollSystem.ControlBlock:Destroy() _G.PureRagdollSystem.ControlBlock = nil end
+        if _G.PureRagdollSystem.AttachmentPlayer then _G.PureRagdollSystem.AttachmentPlayer:Destroy() _G.PureRagdollSystem.AttachmentPlayer = nil end
+        
+        for _, block in ipairs(_G.PureRagdollSystem.CrucifixBlocks) do pcall(function() block:Destroy() end) end
+        _G.PureRagdollSystem.CrucifixBlocks = {}
+        _G.PureRagdollSystem.CrucifixRopes = {}
+        
+        local char = player.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        local torso = char and char:FindFirstChild("Torso")
+        
+        if hum then 
+            hum:SetStateEnabled(Enum.HumanoidStateType.GettingUp, true) 
+            hum:ChangeState(Enum.HumanoidStateType.GettingUp) 
+            hum.PlatformStand = false
+        end
+        if root then
+            root.Velocity = Vector3.new()
+            if root:FindFirstChild("GhostGyro") then root.GhostGyro:Destroy() end
+            if root:FindFirstChild("GhostPos") then root.GhostPos:Destroy() end
+        end
+        if torso then if torso:FindFirstChild("GhostPos") then torso.GhostPos:Destroy() end end
+        if char then
+            for _, part in ipairs(char:GetChildren()) do
+                if part:IsA("BasePart") then
+                    if part:FindFirstChild("PermanentAntiGravity") then part.PermanentAntiGravity:Destroy() end
+                    if part:FindFirstChild("CrucifixAttachment") then part.CrucifixAttachment:Destroy() end
+                end
+            end
+        end
+    end)
+    print("Система марионетки: Очистка успешно завершена.")
+end
+
+-- Инициализация марионетки привязанной к лицу
+function _G.PureRagdollSystem.CreatePuppetSetup()
+    local char = player.Character
+    local head = char and char:FindFirstChild("Head")
+    if not head then return end
+    
+    if _G.PureRagdollSystem.ControlBlock then _G.PureRagdollSystem.ControlBlock:Destroy() end
+    if _G.PureRagdollSystem.AttachmentPlayer then _G.PureRagdollSystem.AttachmentPlayer:Destroy() end
+    
+    local blockPos = head.Position + Vector3.new(0, 17, 0)
+    
+    local rp = RaycastParams.new(); local list = {}
+    for _, p in ipairs(Players:GetPlayers()) do if p.Character then table.insert(list, p.Character) end end
+    rp.FilterDescendantsInstances = list; rp.FilterType = Enum.RaycastFilterType.Exclude
+    local ray = workspace:Raycast(head.Position, Vector3.new(0, -20, 0), rp)
+    local groundY = ray and ray.Position.Y or (head.Position.Y - 3)
+    
+    _G.PureRagdollSystem.CurrentRopeLength = math.max((blockPos.Y - groundY) - 1.2, 3)
+    
+    local block = Instance.new("Part")
+    block.Size = Vector3.new(2, 1, 2)
+    block.Position = blockPos
+    block.Transparency = 1 
+    block.CanCollide = false
+    block.Parent = workspace
+    _G.PureRagdollSystem.ControlBlock = block
+    
+    local bv = Instance.new("BodyVelocity", block)
+    bv.Velocity = Vector3.new(0, 0, 0)
+    bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+    
+    local bf = Instance.new("BodyForce", block)
+    bf.Force = Vector3.new(0, block:GetMass() * workspace.Gravity, 0)
+    
+    _G.PureRagdollSystem.AttachmentAnker = Instance.new("Attachment", block)
+    
+    local attPlayer = Instance.new("Attachment", head)
+    attPlayer.CFrame = CFrame.new(0, 0, -0.5) 
+    _G.PureRagdollSystem.AttachmentPlayer = attPlayer
+    
+    local rope = Instance.new("RopeConstraint", block)
+    rope.Attachment0 = _G.PureRagdollSystem.AttachmentAnker
+    rope.Attachment1 = _G.PureRagdollSystem.AttachmentPlayer
+    rope.Length = _G.PureRagdollSystem.CurrentRopeLength
+    rope.Visible = true
+    rope.Thickness = 0.15
+    rope.Transparency = 0.8 
+    rope.Color = BrickColor.new("White")
+    _G.PureRagdollSystem.Rope = rope
+    
+    for _, part in ipairs(char:GetChildren()) do
+        if part:IsA("BasePart") then
+            local noCollide = Instance.new("NoCollisionConstraint", block)
+            noCollide.Part0 = part; noCollide.Part1 = block
+        end
+    end
+end
+
+-- Инициализация распятия (позиции блоков в пространстве вокруг торса)
+function _G.PureRagdollSystem.CreateCrucifixSetup()
+    local char = player.Character
+    local torso = char and char:FindFirstChild("Torso")
+    if not torso then return end
+    
+    _G.PureRagdollSystem.CleanUp()
+    _G.PureRagdollSystem.Active = true
+    _G.PureRagdollSystem.CrucifixMode = true
+    
+    local centerPos = torso.Position + Vector3.new(0, 4, 0) 
+    local radius = 9 
+    
+    local angles = {math.rad(90), math.rad(162), math.rad(234), math.rad(306), math.rad(18)}
+    local limbNames = {"Head", "Left Arm", "Left Leg", "Right Leg", "Right Arm"}
+    
+    for i = 1, 5 do
+        local angle = angles[i]
+        local offset = Vector3.new(math.cos(angle) * radius, math.sin(angle) * radius, 0)
+        local blockPos = centerPos + offset
+        
+        local block = Instance.new("Part")
+        block.Size = Vector3.new(1.5, 1.5, 1.5)
+        block.Position = blockPos
+        block.Transparency = 1 
+        block.Anchored = true
+        block.CanCollide = false
+        block.Parent = workspace
+        table.insert(_G.PureRagdollSystem.CrucifixBlocks, block)
+        
+        local limb = char:FindFirstChild(limbNames[i]) or char:FindFirstChild(limbNames[i]:gsub(" ", ""))
+        if limb then
+            local attAnker = Instance.new("Attachment", block)
+            local attPlayer = Instance.new("Attachment", limb)
+            attPlayer.Name = "CrucifixAttachment"
+            
+            local rope = Instance.new("RopeConstraint", block)
+            rope.Attachment0 = attAnker
+            rope.Attachment1 = attPlayer
+            rope.Length = _G.PureRagdollSystem.CrucifixTargetLength
+            rope.Visible = true
+            rope.Thickness = 0.12
+            rope.Transparency = 0.5 
+            rope.Color = BrickColor.new("White")
+            
+            table.insert(_G.PureRagdollSystem.CrucifixRopes, rope)
+        end
+    end
+end
+
+print("Окно 1: Инициализация ядра завершена успешно!")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local player = Players.LocalPlayer
+
+local sys = _G.PureRagdollSystem
+if not sys then print("Ошибка: Пожалуйста, сначала выполните Окно 1!") return end
+
+if sys.MainPhysicsLoop then
+    pcall(function() sys.MainPhysicsLoop:Disconnect() end)
+end
+
+sys.MainPhysicsLoop = RunService.Heartbeat:Connect(function(dt)
+    local char = player.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    local torso = char and char:FindFirstChild("Torso")
+    if not hum or hum.Health <= 0 or not root or not torso or not char.Parent then return end
+    
+    if sys.Active then
+        -- Держим стейт физики, чтобы персонаж не пытался встать самостоятельно
+        hum:ChangeState(Enum.HumanoidStateType.Physics)
+        
+        -- ЗАЩИТА ОТ ЗАМОРОЗКИ: Принудительно размораживаем все части персонажа, если игра их заанкорила
+        if root.Anchored then root.Anchored = false end
+        if torso.Anchored then torso.Anchored = false end
+        
+        -- Выбор коэффициента перегрузки гравитации для разных состояний
+        local gravityMod = 0.65
+        if sys.PuppetMode then
+            gravityMod = -0.30 -- Усиленный вес для куклы
+        elseif sys.CrucifixMode then
+            gravityMod = 0.05 -- Легкость конечностей при растяжке
+        end
+        
+        for _, part in ipairs(char:GetChildren()) do
+            if part:IsA("BasePart") then
+                -- Убеждаемся, что конечности тоже не заморожены
+                if part.Anchored then part.Anchored = false end
+                
+                if part.Name ~= "HumanoidRootPart" and part.Name ~= "Torso" then
+                    local bf = part:FindFirstChild("PermanentAntiGravity") or Instance.new("BodyForce", part)
+                    bf.Name = "PermanentAntiGravity"
+                    bf.force = Vector3.new(0, part:GetMass() * workspace.Gravity * gravityMod, 0)
+                end
+                if part.Name ~= "HumanoidRootPart" then 
+                    part.CanCollide = true
+                    part.RotVelocity = part.RotVelocity * 0.85 
+                end
+            end
+        end
+        
+        -- Оригинальный взлет на спину (Клавиша E)
+        if sys.Hovering and not sys.PuppetMode and not sys.CrucifixMode then
+            sys.HoverTime = sys.HoverTime + dt
+            sys.TakeoffProgress = math.clamp(sys.TakeoffProgress + (dt / 3), 0, 1)
+            
+            local gyro = root:FindFirstChild("GhostGyro") or Instance.new("BodyGyro", root)
+            gyro.Name = "GhostGyro"; gyro.maxTorque = Vector3.new(1e6, 1e6, 1e6); gyro.P = 20000
+            gyro.cframe = CFrame.Angles(0, sys.Yaw, 0) * CFrame.Angles(math.rad(90), 0, 0)
+            
+            local rp = RaycastParams.new(); local list = {}
+            for _, p in ipairs(Players:GetPlayers()) do if p.Character then table.insert(list, p.Character) end end
+            rp.FilterDescendantsInstances = list; rp.FilterType = Enum.RaycastFilterType.Exclude
+            local ray = workspace:Raycast(torso.Position, Vector3.new(0, -50, 0), rp)
+            local groundY = ray and ray.Position.Y or torso.Position.Y - 5
+            
+            local wave = (sys.TakeoffProgress >= 1) and (math.sin(sys.HoverTime * (2 * math.pi / 10)) * 0.5) or 0
+            
+            local bpos = torso:FindFirstChild("GhostPos") or Instance.new("BodyPosition", torso)
+            bpos.Name = "GhostPos"; bpos.maxForce = Vector3.new(0, 4e4, 0); bpos.P = 5000; bpos.D = 400
+            bpos.Position = Vector3.new(0, groundY + (sys.Height * sys.TakeoffProgress) + wave + 1.5, 0)
+        else
+            if not sys.PuppetMode and not sys.CrucifixMode then
+                sys.TakeoffProgress = 0
+                sys.HoverTime = 0
+                if root:FindFirstChild("GhostGyro") then root.GhostGyro:Destroy() end
+                if torso:FindFirstChild("GhostPos") then torso.GhostPos:Destroy() end
+            end
+        end
+    end
+end)
+
+print("Окно 2: Исправленный физический цикл с анти-фризом запущен.")
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local player = Players.LocalPlayer
+local camera = workspace.CurrentCamera
+
+local sys = _G.PureRagdollSystem
+if not sys then print("Ошибка: Пожалуйста, сначала выполните Окно 1!") return end
+
+sys.StepTimer = 0
+sys.CurrentRopeOffset = 0
+sys.JumpCooldown = false
+sys.FixedBlockHeightFromGround = 17 
+
+-- Постоянное управление механикой движения
+if sys.ControlLoop then
+    pcall(function() sys.ControlLoop:Disconnect() end)
+end
+
+sys.ControlLoop = RunService.Heartbeat:Connect(function(dt)
+    if not sys or not sys.Active then return end
+    local char = player.Character; local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+    
+    -- РЕЖИМ РАСПЯТИЯ (L)
+    if sys.CrucifixMode then
+        if UserInputService:IsKeyDown(Enum.KeyCode.Up) then
+            sys.CrucifixTargetLength = math.clamp(sys.CrucifixTargetLength - (4 * dt), 0.1, 12)
+            for _, rope in ipairs(sys.CrucifixRopes) do if rope and rope.Parent then rope.Length = sys.CrucifixTargetLength end end
+        elseif UserInputService:IsKeyDown(Enum.KeyCode.Down) then
+            sys.CrucifixTargetLength = math.clamp(sys.CrucifixTargetLength + (4 * dt), 0.1, 12)
+            for _, rope in ipairs(sys.CrucifixRopes) do if rope and rope.Parent then rope.Length = sys.CrucifixTargetLength end end
+        end
+        return 
+    end
+    
+    -- РЕЖИМ МАРИОНЕТКИ (P)
+    if sys.PuppetMode and sys.ControlBlock then
+        local block = sys.ControlBlock
+        local bv = block:FindFirstChildOfClass("BodyVelocity")
+        if not bv then return end
+        
+        local heightChangeSpeed = (1 / 1.5) * dt
+        if UserInputService:IsKeyDown(Enum.KeyCode.Up) then
+            sys.FixedBlockHeightFromGround = math.clamp(sys.FixedBlockHeightFromGround + heightChangeSpeed, 5, 45)
+        elseif UserInputService:IsKeyDown(Enum.KeyCode.Down) then
+            sys.FixedBlockHeightFromGround = math.clamp(sys.FixedBlockHeightFromGround - heightChangeSpeed, 5, 45)
+        end
+        
+        local moveDirection = Vector3.new(0, 0, 0)
+        local isW = UserInputService:IsKeyDown(Enum.KeyCode.W)
+        local isS = UserInputService:IsKeyDown(Enum.KeyCode.S)
+        local isA = UserInputService:IsKeyDown(Enum.KeyCode.A)
+        local isD = UserInputService:IsKeyDown(Enum.KeyCode.D)
+        
+        if isW then moveDirection = moveDirection + camera.CFrame.LookVector end
+        if isS then moveDirection = moveDirection - camera.CFrame.LookVector end
+        if isA then moveDirection = moveDirection - camera.CFrame.RightVector end
+        if isD then moveDirection = moveDirection + camera.CFrame.RightVector end
+        moveDirection = Vector3.new(moveDirection.X, 0, moveDirection.Z)
+        
+        local isMoving = moveDirection.Magnitude > 0
+        
+        -- Шаги-прыжки на 1 студ при ходьбе
+        if isMoving then
+            sys.StepTimer = sys.StepTimer + dt
+            local targetOffset = (math.sin(sys.StepTimer * (math.pi * 2 / 0.6)) - 1) * 0.5
+            sys.CurrentRopeOffset = sys.CurrentRopeOffset + (targetOffset - sys.CurrentRopeOffset) * 0.3
+        else
+            sys.StepTimer = 0
+            sys.CurrentRopeOffset = sys.CurrentRopeOffset + (0 - sys.CurrentRopeOffset) * 0.2
+        end
+        
+        if sys.Rope then
+            sys.Rope.Length = math.max(sys.CurrentRopeLength + sys.CurrentRopeOffset, 1)
+        end
+        
+        local rp = RaycastParams.new(); local list = {}
+        for _, p in ipairs(Players:GetPlayers()) do if p.Character then table.insert(list, p.Character) end end
+        rp.FilterDescendantsInstances = list; rp.FilterType = Enum.RaycastFilterType.Exclude
+        
+        local ray = workspace:Raycast(Vector3.new(block.Position.X, block.Position.Y, block.Position.Z), Vector3.new(0, -60, 0), rp)
+        local groundY = ray and ray.Position.Y or (root.Position.Y - 3)
+        
+        local idealBlockY = groundY + sys.FixedBlockHeightFromGround
+        local targetVelocityY = (idealBlockY - block.Position.Y) * 12
+        
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) and not sys.JumpCooldown then
+            sys.JumpCooldown = true
+            targetVelocityY = 45 
+            task.delay(0.25, function() sys.JumpCooldown = false end)
+        end
+        
+        if isMoving then
+            local horizVel = moveDirection.Unit * 10.66 
+            bv.Velocity = Vector3.new(horizVel.X, targetVelocityY, horizVel.Z)
+        else
+            bv.Velocity = Vector3.new(0, targetVelocityY, 0)
+        end
+        
+    -- ВАШ ОРИГИНАЛЬНЫЙ РЕЖИМ ПАРЕНИЯ (E)
+    elseif sys.Hovering then
+        if UserInputService:IsKeyDown(Enum.KeyCode.Up) then sys.Height = math.clamp(sys.Height + (8 * dt), 1, 10)
+        elseif UserInputService:IsKeyDown(Enum.KeyCode.Down) then sys.Height = math.clamp(sys.Height - (8 * dt), 1, 10) end
+        
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then sys.Yaw = sys.Yaw + (sys.CAR_TURN_SPEED * dt)
+        elseif UserInputService:IsKeyDown(Enum.KeyCode.D) then sys.Yaw = sys.Yaw - (sys.CAR_TURN_SPEED * dt) end
+        
+        local isW, isS = UserInputService:IsKeyDown(Enum.KeyCode.W), UserInputService:IsKeyDown(Enum.KeyCode.S)
+        if (isW or isS) and sys.TakeoffProgress >= 1 then
+            sys.Speed = math.clamp(sys.Speed + (sys.ACCELERATION * dt * 40), 0, sys.MAX_HOVER_SPEED)
+            local dir = CFrame.Angles(0, sys.Yaw, 0).LookVector * sys.Speed * (isW and 1 or -1)
+            root.Velocity = Vector3.new(dir.X, root.Velocity.Y, dir.Z)
+        else
+            sys.Speed = 0
+            root.Velocity = Vector3.new(root.Velocity.X * 0.92, root.Velocity.Y, root.Velocity.Z * 0.92)
+        end
+    end
+end)
+
+-- Прослушивание входящих пакетов нажатия кнопок
+sys.InputConn = UserInputService.InputBegan:Connect(function(i, proc)
+    if proc or not sys then return end
+    
+    if i.KeyCode == Enum.KeyCode.R then
+        sys.Active = not sys.Active
+        if not sys.Active then sys.CleanUp() else
+            print("Регдолл: АКТИВИРОВАН. Клавиши: E (Полет), P (Марионетка), L (Распятие)")
+        end
+        
+    elseif i.KeyCode == Enum.KeyCode.E then
+        if sys.Active and not sys.PuppetMode and not sys.CrucifixMode then
+            sys.Hovering = not sys.Hovering
+        end
+        
+    elseif i.KeyCode == Enum.KeyCode.P then
+        if sys.Active and not sys.CrucifixMode then
+            sys.PuppetMode = not sys.PuppetMode
+            if sys.PuppetMode then
+                sys.Hovering = false 
+                pcall(function()
+                    local torso = player.Character and player.Character:FindFirstChild("Torso")
+                    local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+                    if torso and torso:FindFirstChild("GhostPos") then torso.GhostPos:Destroy() end
+                    if root and root:FindFirstChild("GhostGyro") then root.GhostGyro:Destroy() end
+                end)
+                sys.CreatePuppetSetup()
+            else
+                pcall(function()
+                    local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+                    if hum then hum.PlatformStand = false end
+                end)
+                if sys.ControlBlock then sys.ControlBlock:Destroy() sys.ControlBlock = nil end
+                if sys.AttachmentPlayer then sys.AttachmentPlayer:Destroy() sys.AttachmentPlayer = nil end
+            end
+        end
+        
+    elseif i.KeyCode == Enum.KeyCode.L then
+        if sys.Active then
+            if not sys.CrucifixMode then
+                sys.CreateCrucifixSetup()
+            else
+                sys.CleanUp()
+                sys.Active = true 
+            end
+        end
+    end
+end)
+
+print("Окно 3: Слушатели кнопок и инпуты запущены. Скрипт готов к работе!")
