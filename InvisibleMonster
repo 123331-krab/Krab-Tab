@@ -257,4 +257,18 @@ markerGui.Name = "YetiBeatingSystemGui"
 markerGui.Parent = game.CoreGui
 
 _G.KrabHubScripts = _G.KrabHubScripts or {}
-_G.KrabHubScripts["InvisibleMonster"] = функцияОстановки
+_G.KrabHubScripts["InvisibleMonster"] = function()
+    systemActive = false
+    if loopConnection then loopConnection:Disconnect() loopConnection = nil end
+    if inputConnection then inputConnection:Disconnect() end
+    if deathConnection then deathConnection:Disconnect() end
+    if beatingBlock then pcall(function() beatingBlock:Destroy() end) end
+    if markerGui then pcall(function() markerGui:Destroy() end) end
+    workspace.Gravity = 196.2
+    pcall(function()
+        if character and character:FindFirstChild("Head") then character.Head.Anchored = false end
+        if rootPart then rootPart.Anchored = false end
+        if humanoid then humanoid.PlatformStand = false end
+    end)
+end
+
