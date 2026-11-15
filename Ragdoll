@@ -438,3 +438,6 @@ sys.InputConn = UserInputService.InputBegan:Connect(function(i, proc)
 end)
 
 print("Окно 3: Слушатели кнопок и инпуты запущены. Скрипт готов к работе!")
+
+_G.KrabHubScripts = _G.KrabHubScripts or {}
+_G.KrabHubScripts["Ragdoll"] = функцияОстановки
