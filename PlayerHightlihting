@@ -95,3 +95,6 @@ UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
         toggleESP()
     end
 end)
+
+_G.KrabHubScripts = _G.KrabHubScripts or {}
+_G.KrabHubScripts["PlayerHightlihting"] = функцияОстановки
