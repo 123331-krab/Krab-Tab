@@ -118,4 +118,16 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 end)
 
 _G.KrabHubScripts = _G.KrabHubScripts or {}
-_G.KrabHubScripts["JerkOff"] = функцияОстановки
+_G.KrabHubScripts["JerkOff"] = function()
+    if inputConn1 then inputConn1:Disconnect() end
+    if inputConn2 then inputConn2:Disconnect() end
+    if loopConnection then loopConnection:Disconnect() loopConnection = nil end
+    targetPlayer = nil
+    isScriptLoaded = false
+    pcall(function()
+        if player.Character and player.Character:FindFirstChildOfClass("Humanoid") then
+            player.Character:FindFirstChildOfClass("Humanoid").Sit = false
+        end
+    end)
+end
+
