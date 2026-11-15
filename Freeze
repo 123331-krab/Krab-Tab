@@ -3,9 +3,29 @@ local UIS = game:GetService("UserInputService")
 local localPlayer = Players.LocalPlayer
 local isFrozen, isUnloaded = false, false
 local savedGroups, savedCollide, savedJoints = {}, {}, {}
+local lightPhys = PhysicalProperties.new(0.15, 0.2, 0.5, 1, 1)
 local updateThread, inputConn, charConn
-
-local function setPlayersCollision(enable)
+local function setCollision(enable)
+    local char = localPlayer.Character
+    if char then
+        for _, part in ipairs(char:GetChildren()) do
+            if part:IsA("BasePart") then
+                if enable then
+                    if savedGroups[part] == nil then
+                        savedGroups[part] = part.CollisionGroup
+                        savedCollide[part] = part.CanCollide
+                    end
+                    part.CanCollide = true
+                    part.CollisionGroup = "Default"
+                    part.CustomPhysicalProperties = lightPhys
+                else
+                    if savedGroups[part] ~= nil then part.CollisionGroup = savedGroups[part] end
+                    if savedCollide[part] ~= nil then part.CanCollide = savedCollide[part] end
+                    part.CustomPhysicalProperties = nil
+                end
+            end
+        end
+    end
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= localPlayer and plr.Character then
             for _, part in ipairs(plr.Character:GetChildren()) do
@@ -33,11 +53,9 @@ end
 local function disableFreeze()
     isFrozen = false
     if updateThread then task.cancel(updateThread) updateThread = nil end
-    setPlayersCollision(false)
+    setCollision(false)
     local char = localPlayer.Character
     if char then
-        local root = char:FindFirstChild("HumanoidRootPart")
-        if root then root.Anchored = false end
         for joint, origC0 in pairs(savedJoints) do
             if joint and joint.Parent then joint.C0 = origC0 end
         end
@@ -46,6 +64,7 @@ local function disableFreeze()
         if anim and anim:IsA("LocalScript") then anim.Disabled = false end
         local hum = char:FindFirstChildOfClass("Humanoid")
         if hum then
+            hum.AutoRotate = true
             local animator = hum:FindFirstChildOfClass("Animator")
             if animator then
                 for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
@@ -55,14 +74,12 @@ local function disableFreeze()
         end
     end
 end
-
 local function enableFreeze()
     local char = localPlayer.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart")
     local hum = char and char:FindFirstChildOfClass("Humanoid")
-    if not root or not hum then return end
+    if not hum then return end
     isFrozen = true
-    root.Anchored = true
+    hum.AutoRotate = false
     table.clear(savedJoints)
     for _, obj in ipairs(char:GetDescendants()) do
         if obj:IsA("Motor6D") then
@@ -78,17 +95,14 @@ local function enableFreeze()
             track:AdjustSpeed(0)
         end
     end
-    setPlayersCollision(true)
+    setCollision(true)
     updateThread = task.spawn(function()
         while isFrozen and not isUnloaded do
-            task.wait(0.5)
-            if isFrozen and not isUnloaded then
-                setPlayersCollision(true)
-            end
+            task.wait(0.2)
+            if isFrozen and not isUnloaded then setCollision(true) end
         end
     end)
 end
-
 local function unloadScript()
     if isUnloaded then return end
     isUnloaded = true
@@ -105,7 +119,5 @@ end)
 charConn = localPlayer.CharacterAdded:Connect(function()
     if not isUnloaded and isFrozen then disableFreeze() end
 end)
-
 _G.KrabHubScripts = _G.KrabHubScripts or {}
 _G.KrabHubScripts["Freeze"] = unloadScript
-
