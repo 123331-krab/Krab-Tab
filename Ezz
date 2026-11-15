@@ -200,3 +200,6 @@ charAddedConnection = localPlayer.CharacterAdded:Connect(function()
         disableFreeze()
     end
 end)
+
+_G.KrabHubStopFuncs = _G.KrabHubStopFuncs or {}
+table.insert(_G.KrabHubStopFuncs, unloadScript)
