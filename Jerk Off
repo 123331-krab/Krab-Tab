@@ -1,0 +1,118 @@
+-- АКТИВАЦИЯ СКРИПТА ПО НАЖАТИЮ НА КНОПКУ "K"
+local Player = game:GetService("Players").LocalPlayer
+local UserInputService = game:GetService("UserInputService")
+
+local scriptUrl = "https://pastefy.app/wa3v2Vgm/raw"
+local isScriptLoaded = false
+local scriptFunction = nil
+
+-- Функция переключения состояния
+local function toggleScript()
+    local Character = Player.Character
+    if not Character or not Character:FindFirstChild("Humanoid") then return end
+
+    -- Если скрипт еще ни разу не загружался, скачиваем его один раз
+    if not isScriptLoaded then
+        local success, err = pcall(function()
+            scriptFunction = loadstring(game:HttpGet(scriptUrl))
+        end)
+        
+        if success and scriptFunction then
+            isScriptLoaded = true
+            print("Скрипт успешно загружен в память!")
+        else
+            warn("Не удалось загрузить скрипт: " .. tostring(err))
+            return
+        end
+    end
+
+    -- Запускаем скрипт при нажатии (или переключаем, если внутри заложена такая логика)
+    local runSuccess, runErr = pcall(scriptFunction)
+    if not runSuccess then
+        warn("Ошибка при выполнении скрипта: " .. tostring(runErr))
+    end
+end
+
+-- Отслеживание нажатия клавиши K
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end -- Игнорируем нажатие, если открыт чат
+    
+    if input.KeyCode == Enum.KeyCode.K then
+        toggleScript()
+    end
+end)
+
+
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local mouse = player:GetMouse()
+
+local targetPlayer = nil
+local loopConnection = nil
+
+-- Функция привязки к голове
+local function SitOnHead(target)
+    targetPlayer = target
+    
+    if loopConnection then loopConnection:Disconnect() end
+    
+    loopConnection = RunService.Heartbeat:Connect(function()
+        local character = player.Character
+        local targetChar = targetPlayer and targetPlayer.Character
+        
+        if character and targetChar and targetChar:FindFirstChild("Head") and character:FindFirstChild("HumanoidRootPart") then
+            local humanoid = character:FindFirstChildOfClass("Humanoid")
+            if humanoid then
+                humanoid.Sit = true -- Сажаем персонажа
+            end
+            
+            -- Удерживаем на голове (0, 1.6, 0 — высота посадки)
+            character.HumanoidRootPart.CFrame = targetChar.Head.CFrame * CFrame.new(0, 1.6, 0)
+            character.HumanoidRootPart.Velocity = Vector3.new(0, 0, 0)
+        else
+            -- Если цель умерла или вышла
+            if loopConnection then loopConnection:Disconnect() loopConnection = nil end
+            targetPlayer = nil
+        end
+    end)
+end
+
+-- Отслеживание нажатия клавиш
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    
+    -- НАЖАТИЕ НА Y: Оседлать игрока под курсором
+    if input.KeyCode == Enum.KeyCode.Y then
+        local targetMesh = mouse.Target
+        if targetMesh and targetMesh.Parent then
+            local targetModel = targetMesh.Parent
+            -- Если кликнули по шляпе/аксессуару, поднимаемся выше к модели персонажа
+            if targetModel:IsA("Accessory") then targetModel = targetModel.Parent end
+            
+            local clickedPlayer = Players:GetPlayerFromCharacter(targetModel)
+            
+            -- Если под мышкой чужой живой игрок — садимся
+            if clickedPlayer and clickedPlayer ~= player then
+                SitOnHead(clickedPlayer)
+            end
+        end
+    end
+    
+    -- НАЖАТИЕ НА X: Слезть с головы
+    if input.KeyCode == Enum.KeyCode.X then
+        if loopConnection then
+            loopConnection:Disconnect()
+            loopConnection = nil
+        end
+        targetPlayer = nil
+        pcall(function()
+            if player.Character and player.Character:FindFirstChildOfClass("Humanoid") then
+                player.Character:FindFirstChildOfClass("Humanoid").Sit = false
+            end
+        end)
+    end
+end)
