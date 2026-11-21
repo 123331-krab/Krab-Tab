@@ -1,282 +1,792 @@
-for i, a in ipairs(cachedFavAudio) do
-local creator = (a.creator and a.creator.name) or "Неизвестен"
-addListRow(i, a.name or "Аудио", "Автор: " .. creator .. " | ID: " .. tostring(a.id), a.id, "Audio", reqId, function()
-if copyClipboard then
-copyClipboard(tostring(a.id))
-favAudioBtn.Text = "ID скопирован!"
-task.delay(1.2, function()
-if not isUnloaded and favAudioBtn.Parent then
-favAudioBtn.Text = "Музыка (" .. tostring(#cachedFavAudio) .. ")"
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
+local MarketplaceService = game:GetService("MarketplaceService")
+local LocalizationService = game:GetService("LocalizationService")
+local SoundService = game:GetService("SoundService")
+local localPlayer = Players.LocalPlayer
+local mouse = localPlayer:GetMouse()
+local httpRequest = request or http_request or (syn and syn.request) or (fluxus and fluxus.request)
+local copyClipboard = setclipboard or toclipboard or (syn and syn.write_clipboard)
+local previewSound = Instance.new("Sound")
+previewSound.Name = "InspectorPreviewSound"
+previewSound.Volume = 0.7
+previewSound.Parent = SoundService
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "PlayerInspectorGui"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = game:GetService("CoreGui")
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "MainFrame"
+mainFrame.Size = UDim2.new(0, 440, 0, 435)
+mainFrame.Position = UDim2.new(0.5, -220, 0.5, -217)
+mainFrame.BackgroundColor3 = Color3.fromRGB(22, 22, 27)
+mainFrame.BorderSizePixel = 0
+mainFrame.Visible = false
+mainFrame.Active = true
+mainFrame.Draggable = true
+mainFrame.Parent = screenGui
+local mainCorner = Instance.new("UICorner")
+mainCorner.CornerRadius = UDim.new(0, 10)
+mainCorner.Parent = mainFrame
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Size = UDim2.new(1, -40, 0, 32)
+titleLabel.Position = UDim2.new(0, 14, 0, 2)
+titleLabel.BackgroundTransparency = 1
+titleLabel.Text = "Профиль [Z — закрыть | RCtrl — удалить]"
+titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+titleLabel.TextSize = 13
+titleLabel.Font = Enum.Font.GothamBold
+titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+titleLabel.Parent = mainFrame
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 24, 0, 24)
+closeBtn.Position = UDim2.new(1, -30, 0, 6)
+closeBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 52)
+closeBtn.Text = "X"
+closeBtn.TextColor3 = Color3.fromRGB(255, 90, 90)
+closeBtn.TextSize = 13
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.Parent = mainFrame
+local closeCorner = Instance.new("UICorner")
+closeCorner.CornerRadius = UDim.new(0, 6)
+closeCorner.Parent = closeBtn
+local avatarImage = Instance.new("ImageLabel")
+avatarImage.Size = UDim2.new(0, 84, 0, 84)
+avatarImage.Position = UDim2.new(0, 14, 0, 40)
+avatarImage.BackgroundColor3 = Color3.fromRGB(35, 35, 42)
+avatarImage.BorderSizePixel = 0
+avatarImage.Image = ""
+avatarImage.Parent = mainFrame
+local avatarCorner = Instance.new("UICorner")
+avatarCorner.CornerRadius = UDim.new(0, 8)
+avatarCorner.Parent = avatarImage
+local displayNameLabel = Instance.new("TextLabel")
+displayNameLabel.Size = UDim2.new(1, -116, 0, 22)
+displayNameLabel.Position = UDim2.new(0, 108, 0, 38)
+displayNameLabel.BackgroundTransparency = 1
+displayNameLabel.Text = "Ник"
+displayNameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+displayNameLabel.TextSize = 15
+displayNameLabel.Font = Enum.Font.GothamBold
+displayNameLabel.TextXAlignment = Enum.TextXAlignment.Left
+displayNameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+displayNameLabel.Parent = mainFrame
+local usernameLabel = Instance.new("TextButton")
+usernameLabel.Size = UDim2.new(1, -116, 0, 18)
+usernameLabel.Position = UDim2.new(0, 108, 0, 60)
+usernameLabel.BackgroundTransparency = 1
+usernameLabel.Text = "@username"
+usernameLabel.TextColor3 = Color3.fromRGB(165, 165, 180)
+usernameLabel.TextSize = 13
+usernameLabel.Font = Enum.Font.Gotham
+usernameLabel.TextXAlignment = Enum.TextXAlignment.Left
+usernameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+usernameLabel.Parent = mainFrame
+local invLabel = Instance.new("TextLabel")
+invLabel.Size = UDim2.new(1, -116, 0, 20)
+invLabel.Position = UDim2.new(0, 108, 0, 82)
+invLabel.BackgroundTransparency = 1
+invLabel.Text = "Инвентарь: ..."
+invLabel.TextColor3 = Color3.fromRGB(110, 225, 140)
+invLabel.TextSize = 13
+invLabel.Font = Enum.Font.GothamMedium
+invLabel.TextXAlignment = Enum.TextXAlignment.Left
+invLabel.TextTruncate = Enum.TextTruncate.AtEnd
+invLabel.Parent = mainFrame
+local skinPriceLabel = Instance.new("TextLabel")
+skinPriceLabel.Size = UDim2.new(1, -116, 0, 20)
+skinPriceLabel.Position = UDim2.new(0, 108, 0, 102)
+skinPriceLabel.BackgroundTransparency = 1
+skinPriceLabel.Text = "Цена скина: Подсчёт..."
+skinPriceLabel.TextColor3 = Color3.fromRGB(255, 215, 95)
+skinPriceLabel.TextSize = 13
+skinPriceLabel.Font = Enum.Font.GothamMedium
+skinPriceLabel.TextXAlignment = Enum.TextXAlignment.Left
+skinPriceLabel.TextTruncate = Enum.TextTruncate.AtEnd
+skinPriceLabel.Parent = mainFrame
+local detailsLabel = Instance.new("TextLabel")
+detailsLabel.Size = UDim2.new(1, -28, 0, 104)
+detailsLabel.Position = UDim2.new(0, 14, 0, 130)
+detailsLabel.BackgroundTransparency = 1
+detailsLabel.Text = "Регистрация: ...\nРегион: ...\nСохранённые аватары: ...\nСоцсети: ..."
+detailsLabel.TextColor3 = Color3.fromRGB(215, 215, 225)
+detailsLabel.TextSize = 12
+detailsLabel.Font = Enum.Font.Gotham
+detailsLabel.TextXAlignment = Enum.TextXAlignment.Left
+detailsLabel.TextYAlignment = Enum.TextYAlignment.Top
+detailsLabel.TextWrapped = true
+detailsLabel.Parent = mainFrame
+local badgesHeaderLabel = Instance.new("TextLabel")
+badgesHeaderLabel.Size = UDim2.new(1, -28, 0, 18)
+badgesHeaderLabel.Position = UDim2.new(0, 14, 0, 236)
+badgesHeaderLabel.BackgroundTransparency = 1
+badgesHeaderLabel.Text = "Последние 15 бейджей (от новых к старым):"
+badgesHeaderLabel.TextColor3 = Color3.fromRGB(200, 205, 220)
+badgesHeaderLabel.TextSize = 11
+badgesHeaderLabel.Font = Enum.Font.GothamBold
+badgesHeaderLabel.TextXAlignment = Enum.TextXAlignment.Left
+badgesHeaderLabel.TextTruncate = Enum.TextTruncate.AtEnd
+badgesHeaderLabel.Parent = mainFrame
+local badgesStrip = Instance.new("ScrollingFrame")
+badgesStrip.Size = UDim2.new(1, -28, 0, 56)
+badgesStrip.Position = UDim2.new(0, 14, 0, 256)
+badgesStrip.BackgroundColor3 = Color3.fromRGB(30, 30, 36)
+badgesStrip.BorderSizePixel = 0
+badgesStrip.ScrollBarThickness = 3
+badgesStrip.ScrollingDirection = Enum.ScrollingDirection.X
+badgesStrip.CanvasSize = UDim2.new(0, 0, 0, 0)
+badgesStrip.AutomaticCanvasSize = Enum.AutomaticSize.X
+badgesStrip.Parent = mainFrame
+local bsCorner = Instance.new("UICorner")
+bsCorner.CornerRadius = UDim.new(0, 6)
+bsCorner.Parent = badgesStrip
+local bsPadding = Instance.new("UIPadding")
+bsPadding.PaddingLeft = UDim.new(0, 5)
+bsPadding.PaddingRight = UDim.new(0, 5)
+bsPadding.PaddingTop = UDim.new(0, 5)
+bsPadding.Parent = badgesStrip
+local bsLayout = Instance.new("UIListLayout")
+bsLayout.FillDirection = Enum.FillDirection.Horizontal
+bsLayout.Padding = UDim.new(0, 5)
+bsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+bsLayout.Parent = badgesStrip
+local profileLinkBtn = Instance.new("TextButton")
+profileLinkBtn.Size = UDim2.new(1, -28, 0, 24)
+profileLinkBtn.Position = UDim2.new(0, 14, 0, 320)
+profileLinkBtn.BackgroundColor3 = Color3.fromRGB(34, 38, 48)
+profileLinkBtn.Text = "https://roblox.com"
+profileLinkBtn.TextColor3 = Color3.fromRGB(100, 180, 255)
+profileLinkBtn.TextSize = 12
+profileLinkBtn.Font = Enum.Font.GothamMedium
+profileLinkBtn.TextTruncate = Enum.TextTruncate.AtEnd
+profileLinkBtn.Parent = mainFrame
+local linkCorner = Instance.new("UICorner")
+linkCorner.CornerRadius = UDim.new(0, 6)
+linkCorner.Parent = profileLinkBtn
+local rolimonsBtn = Instance.new("TextButton")
+rolimonsBtn.Size = UDim2.new(1, -28, 0, 24)
+rolimonsBtn.Position = UDim2.new(0, 14, 0, 348)
+rolimonsBtn.BackgroundColor3 = Color3.fromRGB(32, 52, 46)
+rolimonsBtn.Text = "Rolimon's: https://rolimons.com"
+rolimonsBtn.TextColor3 = Color3.fromRGB(95, 235, 175)
+rolimonsBtn.TextSize = 12
+rolimonsBtn.Font = Enum.Font.GothamBold
+rolimonsBtn.TextTruncate = Enum.TextTruncate.AtEnd
+rolimonsBtn.Visible = false
+rolimonsBtn.Parent = mainFrame
+local roliCorner = Instance.new("UICorner")
+roliCorner.CornerRadius = UDim.new(0, 6)
+roliCorner.Parent = rolimonsBtn
+local tabsFrame = Instance.new("Frame")
+tabsFrame.Size = UDim2.new(1, -28, 0, 44)
+tabsFrame.Position = UDim2.new(0, 14, 0, 350)
+tabsFrame.BackgroundTransparency = 1
+tabsFrame.Parent = mainFrame
+local function makeTabBtn(text, color, pos, size)
+	local btn = Instance.new("TextButton")
+	btn.Size = size
+	btn.Position = pos
+	btn.BackgroundColor3 = color
+	btn.Text = text
+	btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	btn.TextSize = 11
+	btn.Font = Enum.Font.GothamBold
+	btn.TextTruncate = Enum.TextTruncate.AtEnd
+	btn.Parent = tabsFrame
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, 5)
+	c.Parent = btn
+	return btn
 end
-end)
+local friendsBtn = makeTabBtn("Друзья (...)", Color3.fromRGB(48, 95, 195), UDim2.new(0, 0, 0, 0), UDim2.new(0.32, 0, 0, 20))
+local placesBtn = makeTabBtn("Плейсы (...)", Color3.fromRGB(48, 145, 110), UDim2.new(0.34, 0, 0, 0), UDim2.new(0.32, 0, 0, 20))
+local itemsBtn = makeTabBtn("Косметика (...)", Color3.fromRGB(145, 85, 185), UDim2.new(0.68, 0, 0, 0), UDim2.new(0.32, 0, 0, 20))
+local wornExpBtn = makeTabBtn("Надето 2k+/Lim (...)", Color3.fromRGB(210, 145, 35), UDim2.new(0, 0, 0, 24), UDim2.new(0.35, 0, 0, 20))
+local favGamesBtn = makeTabBtn("Фавориты игр (...)", Color3.fromRGB(195, 100, 45), UDim2.new(0.365, 0, 0, 24), UDim2.new(0.31, 0, 0, 20))
+local favAudioBtn = makeTabBtn("Музыка (...)", Color3.fromRGB(185, 65, 115), UDim2.new(0.69, 0, 0, 24), UDim2.new(0.31, 0, 0, 20))
+local listContainer = Instance.new("Frame")
+listContainer.Size = UDim2.new(1, -28, 0, 175)
+listContainer.Position = UDim2.new(0, 14, 0, 402)
+listContainer.BackgroundColor3 = Color3.fromRGB(30, 30, 36)
+listContainer.BorderSizePixel = 0
+listContainer.Visible = false
+listContainer.Parent = mainFrame
+local lcCorner = Instance.new("UICorner")
+lcCorner.CornerRadius = UDim.new(0, 8)
+lcCorner.Parent = listContainer
+local listScroll = Instance.new("ScrollingFrame")
+listScroll.Size = UDim2.new(1, -8, 1, -8)
+listScroll.Position = UDim2.new(0, 4, 0, 4)
+listScroll.BackgroundTransparency = 1
+listScroll.BorderSizePixel = 0
+listScroll.ScrollBarThickness = 4
+listScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+listScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+listScroll.Parent = listContainer
+local uiList = Instance.new("UIListLayout")
+uiList.Padding = UDim.new(0, 4)
+uiList.SortOrder = Enum.SortOrder.LayoutOrder
+uiList.Parent = listScroll
+local currentRequestId = 0
+local isUnloaded = false
+local activeTab = nil
+local hasRolimonsLink = false
+local currentRolimonsUrl = ""
+local playingAudioId = nil
+local cachedFriends = {}
+local cachedPlaces = {}
+local cachedItems = {}
+local cachedWornExp = {}
+local cachedFavGames = {}
+local cachedFavAudio = {}
+local currentRegDateStr = "Загрузка..."
+local currentRegionStr = "Загрузка..."
+local currentOutfitsStr = "Загрузка..."
+local currentSocialsStr = "Загрузка..."
+local currentProfileUrl = ""
+local connections = {}
+local inspectByUserId
+local regionNames = {
+	RU = "Россия (RU)", US = "США (US)", GB = "Великобритания (GB)", DE = "Германия (DE)",
+	FR = "Франция (FR)", UA = "Украина (UA)", BY = "Беларусь (BY)", KZ = "Казахстан (KZ)",
+	PL = "Польша (PL)", BR = "Бразилия (BR)", TR = "Турция (TR)", JP = "Япония (JP)",
+	KR = "Южная Корея (KR)", CN = "Китай (CN)", CA = "Канада (CA)", AU = "Австралия (AU)",
+	ES = "Испания (ES)", IT = "Италия (IT)", NL = "Нидерланды (NL)", SE = "Швеция (SE)",
+	FI = "Финляндия (FI)", UZ = "Узбекистан (UZ)", GE = "Грузия (GE)", AM = "Армения (AM)"
+}
+local function updateLayoutPositions()
+	local extraY = hasRolimonsLink and 28 or 0
+	rolimonsBtn.Visible = hasRolimonsLink
+	tabsFrame.Position = UDim2.new(0, 14, 0, 350 + extraY)
+	listContainer.Position = UDim2.new(0, 14, 0, 402 + extraY)
+	local baseHeight = 405 + extraY
+	mainFrame.Size = activeTab and UDim2.new(0, 440, 0, baseHeight + 183) or UDim2.new(0, 440, 0, baseHeight)
 end
-end, a.id)
+local function enableRolimonsButton(userId)
+	if hasRolimonsLink then return end
+	hasRolimonsLink = true
+	currentRolimonsUrl = "https://rolimons.com" .. tostring(userId)
+	rolimonsBtn.Text = currentRolimonsUrl .. " [Копировать]"
+	updateLayoutPositions()
 end
+local function safeGet(url)
+	if not httpRequest then return nil end
+	local ok, res = pcall(function()
+		return httpRequest({
+			Url = url,
+			Method = "GET",
+			Headers = {
+				["Accept"] = "application/json",
+				["User-Agent"] = "Roblox/WinInet"
+			}
+		})
+	end)
+	if ok and res and res.StatusCode == 200 and res.Body then
+		local decOk, data = pcall(function()
+			return HttpService:JSONDecode(res.Body)
+		end)
+		if decOk then return data end
+	end
+	return nil
 end
+local function formatNumber(n)
+	local str = tostring(math.floor(n))
+	return str:reverse():gsub("(%d%d%d)", "%1,"):reverse():gsub("^,", "")
+end
+local function updateDetailsText()
+	detailsLabel.Text = string.format(
+		"Регистрация: %s\nРегион: %s\nСохранённые аватары: %s\nСоцсети: %s",
+		currentRegDateStr,
+		currentRegionStr,
+		currentOutfitsStr,
+		currentSocialsStr
+	)
+end
+local function clearScroll()
+	for _, child in ipairs(listScroll:GetChildren()) do
+		if not child:IsA("UIListLayout") then
+			child:Destroy()
+		end
+	end
+end
+local function clearBadgesStrip()
+	for _, child in ipairs(badgesStrip:GetChildren()) do
+		if child:IsA("GuiObject") then
+			child:Destroy()
+		end
+	end
+end
+local function addEmptyMessage(msg)
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.new(1, 0, 0, 32)
+	lbl.BackgroundTransparency = 1
+	lbl.Text = msg
+	lbl.TextColor3 = Color3.fromRGB(165, 165, 180)
+	lbl.TextSize = 12
+	lbl.Font = Enum.Font.Gotham
+	lbl.Parent = listScroll
+end
+local function addListRow(index, titleText, subText, thumbId, thumbType, reqId, onClickCallback, playAudioId)
+	local row = Instance.new("TextButton")
+	row.Size = UDim2.new(1, -6, 0, 40)
+	row.BackgroundColor3 = Color3.fromRGB(38, 38, 46)
+	row.BorderSizePixel = 0
+	row.Text = ""
+	row.AutoButtonColor = onClickCallback ~= nil
+	row.LayoutOrder = index
+	row.Parent = listScroll
+	local rCorner = Instance.new("UICorner")
+	rCorner.CornerRadius = UDim.new(0, 6)
+	rCorner.Parent = row
+	if onClickCallback then
+		row.MouseButton1Click:Connect(onClickCallback)
+	end
+	local icon = Instance.new("ImageLabel")
+	icon.Size = UDim2.new(0, 32, 0, 32)
+	icon.Position = UDim2.new(0, 4, 0, 4)
+	icon.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+	icon.BorderSizePixel = 0
+	icon.Parent = row
+	local iCorner = Instance.new("UICorner")
+	iCorner.CornerRadius = UDim.new(0, 6)
+	iCorner.Parent = icon
+	local rightPad = playAudioId and 82 or 46
+	local tLbl = Instance.new("TextLabel")
+	tLbl.Size = UDim2.new(1, -rightPad, 0, 18)
+	tLbl.Position = UDim2.new(0, 42, 0, 3)
+	tLbl.BackgroundTransparency = 1
+	tLbl.Text = titleText
+	tLbl.TextColor3 = Color3.fromRGB(240, 240, 250)
+	tLbl.TextSize = 12
+	tLbl.Font = Enum.Font.GothamBold
+	tLbl.TextXAlignment = Enum.TextXAlignment.Left
+	tLbl.TextTruncate = Enum.TextTruncate.AtEnd
+	tLbl.Parent = row
+	local sLbl = Instance.new("TextLabel")
+	sLbl.Size = UDim2.new(1, -rightPad, 0, 16)
+	sLbl.Position = UDim2.new(0, 42, 0, 21)
+	sLbl.BackgroundTransparency = 1
+	sLbl.Text = subText
+	sLbl.TextColor3 = Color3.fromRGB(160, 165, 180)
+	sLbl.TextSize = 11
+	sLbl.Font = Enum.Font.Gotham
+	sLbl.TextXAlignment = Enum.TextXAlignment.Left
+	sLbl.TextTruncate = Enum.TextTruncate.AtEnd
+	sLbl.Parent = row
+	if playAudioId then
+		local playBtn = Instance.new("TextButton")
+		playBtn.Size = UDim2.new(0, 32, 0, 28)
+		playBtn.Position = UDim2.new(1, -36, 0, 6)
+		playBtn.BackgroundColor3 = (playingAudioId == playAudioId and previewSound.IsPlaying) and Color3.fromRGB(210, 75, 75) or Color3.fromRGB(55, 165, 105)
+		playBtn.Text = (playingAudioId == playAudioId and previewSound.IsPlaying) and "■" or "▶"
+		playBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		playBtn.TextSize = 13
+		playBtn.Font = Enum.Font.GothamBold
+		playBtn.Parent = row
+		local pbCorner = Instance.new("UICorner")
+		pbCorner.CornerRadius = UDim.new(0, 6)
+		pbCorner.Parent = playBtn
+		playBtn.MouseButton1Click:Connect(function()
+			if playingAudioId == playAudioId and previewSound.IsPlaying then
+				previewSound:Stop()
+				playingAudioId = nil
+				playBtn.Text = "▶"
+				playBtn.BackgroundColor3 = Color3.fromRGB(55, 165, 105)
+			else
+				previewSound:Stop()
+				playingAudioId = playAudioId
+				previewSound.SoundId = "rbxassetid://" .. tostring(playAudioId)
+				previewSound:Play()
+				for _, r in ipairs(listScroll:GetChildren()) do
+					local b = r:FindFirstChildOfClass("TextButton")
+					if b then
+						b.Text = "▶"
+						b.BackgroundColor3 = Color3.fromRGB(55, 165, 105)
+					end
+				end
+				playBtn.Text = "■"
+				playBtn.BackgroundColor3 = Color3.fromRGB(210, 75, 75)
+			end
+		end)
+	end
+	if thumbId and index <= 40 then
+		task.spawn(function()
+			if thumbType == "Avatar" then
+				local ok, img = pcall(function()
+					return Players:GetUserThumbnailAsync(thumbId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
+				end)
+				if ok and img and reqId == currentRequestId and icon.Parent then
+					icon.Image = img
+				end
+			elseif thumbType == "Asset" then
+				if reqId == currentRequestId and icon.Parent then
+					icon.Image = "rbxthumb://type=Asset&id=" .. tostring(thumbId) .. "&w=150&h=150"
+				end
+			elseif thumbType == "Game" then
+				if reqId == currentRequestId and icon.Parent then
+					icon.Image = "rbxthumb://type=GameIcon&id=" .. tostring(thumbId) .. "&w=150&h=150"
+				end
+			elseif thumbType == "Audio" then
+				if reqId == currentRequestId and icon.Parent then
+					icon.Image = "rbxassetid://11254763826"
+				end
+			end
+		end)
+	end
+end
+local function switchTab(tabName)
+	if activeTab == tabName then
+		activeTab = nil
+		listContainer.Visible = false
+		updateLayoutPositions()
+		return
+	end
+	activeTab = tabName
+	listContainer.Visible = true
+	updateLayoutPositions()
+	clearScroll()
+	local reqId = currentRequestId
+	if tabName == "Friends" then
+		if #cachedFriends == 0 then
+			addEmptyMessage("Друзей нет или список скрыт")
+			return
+		end
+		for i, f in ipairs(cachedFriends) do
+			addListRow(i, f.displayName or f.name, "@" .. f.name .. " — нажми для перехода", f.id, "Avatar", reqId, function()
+				inspectByUserId(f.id, f.name, f.displayName or f.name)
+			end, nil)
+		end
+	elseif tabName == "Places" then
+		if #cachedPlaces == 0 then
+			addEmptyMessage("Рабочих открытых плейсов не найдено")
+			return
+		end
+		for i, p in ipairs(cachedPlaces) do
+			local visits = formatNumber(p.placeVisits or 0)
+			addListRow(i, p.name or "Без названия", "Визитов: " .. visits .. " | PlaceID: " .. tostring(p.rootPlaceId or p.id), p.id, "Game", reqId, function()
+				if copyClipboard then copyClipboard(tostring(p.rootPlaceId or p.id)) end
+			end, nil)
+		end
+	elseif tabName == "Items" then
+		if #cachedItems == 0 then
+			addEmptyMessage("Созданных предметов/косметики не найдено")
+			return
+		end
+		for i, item in ipairs(cachedItems) do
+			local priceStr = (item.price and item.price > 0) and (formatNumber(item.price) .. " R$") or "Бесплатно / Не в продаже"
+			addListRow(i, item.name or "Предмет", priceStr .. " | ID: " .. tostring(item.id), item.id, "Asset", reqId, function()
+				if copyClipboard then copyClipboard(tostring(item.id)) end
+			end, nil)
+		end
+	elseif tabName == "WornExp" then
+		if #cachedWornExp == 0 then
+			addEmptyMessage("Надетых вещей от 2,000 R$ или лимиток нет")
+			return
+		end
+		for i, w in ipairs(cachedWornExp) do
+			local tagText = w.tag ~= "" and ("[" .. w.tag .. "] ") or ""
+			local priceText = w.price > 0 and (formatNumber(w.price) .. " R$") or "Лимитка (нет в продаже)"
+			addListRow(i, tagText .. w.name, "Цена: " .. priceText .. " | ID: " .. tostring(w.id), w.id, "Asset", reqId, function()
+				if copyClipboard then copyClipboard(tostring(w.id)) end
+			end, nil)
+		end
+	elseif tabName == "FavGames" then
+		if #cachedFavGames == 0 then
+			addEmptyMessage("Избранные игры скрыты или отсутствуют")
+			return
+		end
+		for i, g in ipairs(cachedFavGames) do
+			local visits = formatNumber(g.placeVisits or 0)
+			local creator = (g.creator and g.creator.name) or "Автор неизвестен"
+			addListRow(i, g.name or "Игра", "Автор: " .. creator .. " | Визитов: " .. visits, g.id, "Game", reqId, function()
+				if copyClipboard then copyClipboard(tostring(g.rootPlaceId or g.id)) end
+			end, nil)
+		end
+	elseif tabName == "FavAudio" then
+		if #cachedFavAudio == 0 then
+			addEmptyMessage("Избранная музыка скрыта или отсутствует")
+			return
+		end
+		for i, a in ipairs(cachedFavAudio) do
+			local creator = (a.creator and a.creator.name) or "Неизвестен"
+			addListRow(i, a.name or "Аудио", "Автор: " .. creator .. " | ID: " .. tostring(a.id), a.id, "Audio", reqId, function()
+				if copyClipboard then
+					copyClipboard(tostring(a.id))
+					favAudioBtn.Text = "ID скопирован!"
+					task.delay(1.2, function()
+						if not isUnloaded and favAudioBtn.Parent then
+							favAudioBtn.Text = "Музыка (" .. tostring(#cachedFavAudio) .. ")"
+						end
+					end)
+				end
+			end, a.id)
+		end
+	end
 end
 local function renderBadgesStrip(badgesList, awardedMap, reqId)
-clearBadgesStrip()
-if #badgesList == 0 then
-badgesHeaderLabel.Text = "Последние 15 бейджей: скрыты или отсутствуют"
-return
-end
-badgesHeaderLabel.Text = "Последние " .. tostring(#badgesList) .. " бейджей (наведи для игры и даты):"
-for i, b in ipairs(badgesList) do
-local badgeBtn = Instance.new("ImageButton")
-badgeBtn.Size = UDim2.new(0, 44, 0, 44)
-badgeBtn.BackgroundColor3 = Color3.fromRGB(24, 24, 30)
-badgeBtn.BorderSizePixel = 0
-badgeBtn.LayoutOrder = i
-badgeBtn.Image = "rbxthumb://type=BadgeIcon&id=" .. tostring(b.id) .. "&w=150&h=150"
-badgeBtn.Parent = badgesStrip
-local bc = Instance.new("UICorner")
-bc.CornerRadius = UDim.new(1, 0)
-bc.Parent = badgeBtn
-local gameName = (b.awarder and b.awarder.name) or "Игра"
-local rawDate = awardedMap[b.id]
-local dateFormatted = ""
-if rawDate then
-local y, m, d = rawDate:match("^(%d+)%-(%d+)%-(%d+)")
-if y and m and d then
-dateFormatted = string.format(" [%s.%s.%s]", d, m, y)
-end
-end
-local fullInfo = string.format("#%d: %s — %s%s", i, b.name or "Бейдж", gameName, dateFormatted)
-badgeBtn.MouseEnter:Connect(function()
-if reqId == currentRequestId then
-badgesHeaderLabel.Text = fullInfo
-badgesHeaderLabel.TextColor3 = Color3.fromRGB(255, 220, 110)
-end
-end)
-badgeBtn.MouseLeave:Connect(function()
-if reqId == currentRequestId then
-badgesHeaderLabel.Text = "Последние " .. tostring(#badgesList) .. " бейджей (от новых к старым):"
-badgesHeaderLabel.TextColor3 = Color3.fromRGB(200, 205, 220)
-end
-end)
-badgeBtn.MouseButton1Click:Connect(function()
-if copyClipboard then
-copyClipboard(tostring(b.id))
-badgesHeaderLabel.Text = "Скопирован ID бейджа: " .. tostring(b.id)
-end
-end)
-end
+	clearBadgesStrip()
+	if #badgesList == 0 then
+		badgesHeaderLabel.Text = "Последние 15 бейджей: скрыты или отсутствуют"
+		return
+	end
+	badgesHeaderLabel.Text = "Последние " .. tostring(#badgesList) .. " бейджей (наведи для игры и даты):"
+	for i, b in ipairs(badgesList) do
+		local badgeBtn = Instance.new("ImageButton")
+		badgeBtn.Size = UDim2.new(0, 44, 0, 44)
+		badgeBtn.BackgroundColor3 = Color3.fromRGB(24, 24, 30)
+		badgeBtn.BorderSizePixel = 0
+		badgeBtn.LayoutOrder = i
+		badgeBtn.Image = "rbxthumb://type=BadgeIcon&id=" .. tostring(b.id) .. "&w=150&h=150"
+		badgeBtn.Parent = badgesStrip
+		local bc = Instance.new("UICorner")
+		bc.CornerRadius = UDim.new(1, 0)
+		bc.Parent = badgeBtn
+		local gameName = (b.awarder and b.awarder.name) or "Игра"
+		local rawDate = awardedMap[b.id]
+		local dateFormatted = ""
+		if rawDate then
+			local y, m, d = rawDate:match("^(%d+)%-(%d+)%-(%d+)")
+			if y and m and d then
+				dateFormatted = string.format(" [%s.%s.%s]", d, m, y)
+			end
+		end
+		local fullInfo = string.format("#%d: %s — %s%s", i, b.name or "Бейдж", gameName, dateFormatted)
+		badgeBtn.MouseEnter:Connect(function()
+			if reqId == currentRequestId then
+				badgesHeaderLabel.Text = fullInfo
+				badgesHeaderLabel.TextColor3 = Color3.fromRGB(255, 220, 110)
+			end
+		end)
+		badgeBtn.MouseLeave:Connect(function()
+			if reqId == currentRequestId then
+				badgesHeaderLabel.Text = "Последние " .. tostring(#badgesList) .. " бейджей (от новых к старым):"
+				badgesHeaderLabel.TextColor3 = Color3.fromRGB(200, 205, 220)
+			end
+		end)
+		badgeBtn.MouseButton1Click:Connect(function()
+			if copyClipboard then
+				copyClipboard(tostring(b.id))
+				badgesHeaderLabel.Text = "Скопирован ID бейджа: " .. tostring(b.id)
+			end
+		end)
+	end
 end
 local function fetchAllPlayerData(userId, plrInstance, reqId)
-if plrInstance then
-local fallbackUnix = os.time() - (plrInstance.AccountAge * 86400)
-currentRegDateStr = os.date("%d.%m.%Y", fallbackUnix) .. " (" .. plrInstance.AccountAge .. " дн.)"
-local okReg, code = pcall(function()
-return LocalizationService:GetCountryRegionForPlayerAsync(plrInstance)
-end)
-if okReg and code and code ~= "" then
-currentRegionStr = regionNames[code] or code
-elseif plrInstance.LocaleId and plrInstance.LocaleId ~= "" then
-currentRegionStr = "Локаль: " .. plrInstance.LocaleId
-else
-currentRegionStr = "Неизвестно"
-end
-else
-currentRegDateStr = "Загрузка..."
-currentRegionStr = "Вне сервера (по API)"
-end
-updateDetailsText()
-task.spawn(function()
-local data = safeGet("roblox.com" .. tostring(userId))
-if reqId ~= currentRequestId then return end
-if data then
-if data.displayName then displayNameLabel.Text = data.displayName end
-if data.name then usernameLabel.Text = "@" .. data.name end
-if data.created then
-local y, m, d = data.created:match("^(%d+)%-(%d+)%-(%d+)")
-if y and m and d then
-local days = plrInstance and (" (" .. plrInstance.AccountAge .. " дн.)") or ""
-currentRegDateStr = string.format("%s.%s.%s%s", d, m, y, days)
-updateDetailsText()
-end
-end
-end
-end)
-task.spawn(function()
-local socialsData = safeGet("roblox.com" .. tostring(userId) .. "/promotion-channels")
-if reqId ~= currentRequestId then return end
-local links = {}
-if socialsData and type(socialsData) == "table" then
-local map = {
-youtube = "YouTube", twitch = "Twitch", twitter = "X/Twitter",
-facebook = "Facebook", guilded = "Guilded"
-}
-for key, label in pairs(map) do
-local val = socialsData[key]
-if val and type(val) == "string" and val ~= "" then
-table.insert(links, label .. ": " .. val)
-end
-end
-end
-currentSocialsStr = (#links > 0) and table.concat(links, " | ") or "Нет привязанных ссылок"
-updateDetailsText()
-end)
-task.spawn(function()
-local totalSkinCost = 0
-local expensiveList = {}
-local foundLimited = false
-local ok, appInfo = pcall(function()
-return Players:GetCharacterAppearanceInfoAsync(userId)
-end)
-if reqId ~= currentRequestId then return end
-if ok and appInfo and appInfo.assets then
-for _, asset in ipairs(appInfo.assets) do
-if reqId ~= currentRequestId then return end
-local pOk, info = pcall(function()
-return MarketplaceService:GetProductInfo(asset.id, Enum.InfoType.Asset)
-end)
-if pOk and info then
-local price = (type(info.PriceInRobux) == "number") and info.PriceInRobux or 0
-totalSkinCost += price
-local tag = ""
-if info.IsUnique == true then
-tag = "LIMITED U"
-foundLimited = true
-elseif info.IsLimited == true then
-tag = "LIMITED"
-foundLimited = true
-end
-if price >= 2000 or tag ~= "" then
-table.insert(expensiveList, {
-id = asset.id,
-name = info.Name or asset.name or "Предмет",
-price = price,
-tag = tag
-})
-end
-end
-end
-end
-if reqId ~= currentRequestId then return end
-skinPriceLabel.Text = "Цена скина: " .. formatNumber(totalSkinCost) .. " R$"
-cachedWornExp = expensiveList
-wornExpBtn.Text = "Надето 2k+/Lim (" .. tostring(#cachedWornExp) .. ")"
-if foundLimited then
-enableRolimonsButton(userId)
-end
-if activeTab == "WornExp" then activeTab = nil; switchTab("WornExp") end
-end)
-task.spawn(function()
-local data = safeGet("roblox.com" .. tostring(userId) .. "/outfits?itemsPerPage=50")
-if reqId ~= currentRequestId then return end
-if data and data.data and #data.data > 0 then
-local names = {}
-for idx, outfit in ipairs(data.data) do
-if idx <= 3 then table.insert(names, outfit.name) end
-end
-local more = (#data.data > 3) and (" +" .. (#data.data - 3)) or ""
-currentOutfitsStr = tostring(#data.data) .. " шт. (" .. table.concat(names, ", ") .. more .. ")"
-else
-local ok, appInfo = pcall(function()
-return Players:GetCharacterAppearanceInfoAsync(userId)
-end)
-if reqId ~= currentRequestId then return end
-if ok and appInfo and appInfo.assets then
-currentOutfitsStr = "Скрыты (надето вещей: " .. tostring(#appInfo.assets) .. ")"
-else
-currentOutfitsStr = "Скрыты настройками"
-end
-end
-updateDetailsText()
-end)
-task.spawn(function()
-local badgesData = safeGet("roblox.com" .. tostring(userId) .. "/badges?limit=15&sortOrder=Desc")
-if reqId ~= currentRequestId then return end
-local list = (badgesData and badgesData.data) or {}
-local awardedMap = {}
-if #list > 0 then
-local ids = {}
-for _, b in ipairs(list) do
-table.insert(ids, tostring(b.id))
-end
-local datesData = safeGet("roblox.com" .. tostring(userId) .. "/badges/awarded-dates?badgeIds=" .. table.concat(ids, ","))
-if reqId ~= currentRequestId then return end
-if datesData and datesData.data then
-for _, entry in ipairs(datesData.data) do
-awardedMap[entry.badgeId] = entry.awardedDate
-end
-end
-end
-renderBadgesStrip(list, awardedMap, reqId)
-end)
-task.spawn(function()
-local list = {}
-local apiData = safeGet("roblox.com" .. tostring(userId) .. "/friends")
-if apiData and apiData.data then
-for _, f in ipairs(apiData.data) do
-table.insert(list, { id = f.id, name = f.name, displayName = f.displayName })
-end
-else
-local ok, pages = pcall(function() return Players:GetFriendsAsync(userId) end)
-if ok and pages then
-while true do
-for _, item in ipairs(pages:GetCurrentPage()) do
-table.insert(list, { id = item.Id, name = item.Username, displayName = item.DisplayName })
-end
-if pages.IsFinished or #list >= 200 then break end
-pcall(function() pages:AdvanceToNextPageAsync() end)
-end
-end
-end
-if reqId ~= currentRequestId then return end
-cachedFriends = list
-friendsBtn.Text = "Друзья (" .. tostring(#cachedFriends) .. ")"
-if activeTab == "Friends" then activeTab = nil; switchTab("Friends") end
-end)
-task.spawn(function()
-local activeGames = {}
-local gamesData = safeGet("roblox.com" .. tostring(userId) .. "/games?accessFilter=Public&limit=50")
-if gamesData and gamesData.data then
-for _, g in ipairs(gamesData.data) do
-if g.rootPlaceId then
-table.insert(activeGames, g)
-end
-end
-end
-if reqId ~= currentRequestId then return end
-cachedPlaces = activeGames
-placesBtn.Text = "Плейсы (" .. tostring(#cachedPlaces) .. ")"
-if activeTab == "Places" then activeTab = nil; switchTab("Places") end
-end)
-task.spawn(function()
-local createdItems = {}
-local catData = safeGet("roblox.com" .. tostring(userId) .. "&CreatorType=User&Limit=30")
-if catData and catData.data then
-for _, item in ipairs(catData.data) do
-table.insert(createdItems, item)
-end
-end
-if reqId ~= currentRequestId then return end
-cachedItems = createdItems
-itemsBtn.Text = "Косметика (" .. tostring(#cachedItems) .. ")"
-if activeTab == "Items" then activeTab = nil; switchTab("Items") end
-end)
-task.spawn(function()
-local favGames = {}
-local favData = safeGet("roblox.com" .. tostring(userId) .. "/favorite/games?limit=50")
-if favData and favData.data then
-for _, g in ipairs(favData.data) do
-table.insert(favGames, g)
-end
-end
-if reqId ~= currentRequestId then return end
-cachedFavGames = favGames
-favGamesBtn.Text = "Фавориты игр (" .. tostring(#cachedFavGames) .. ")"
-if activeTab == "FavGames" then activeTab = nil; switchTab("FavGames") end
-end)
-task.spawn(function()
-local favAudio = {}
-local audioData = safeGet("roblox.com" .. tostring(userId) .. "/favorites/3/assets?limit=50")
-if audioData and audioData.data then
-for _, a in ipairs(audioData.data) do
-table.insert(favAudio, a)
-end
-end
+	if plrInstance then
+		local fallbackUnix = os.time() - (plrInstance.AccountAge * 86400)
+		currentRegDateStr = os.date("%d.%m.%Y", fallbackUnix) .. " (" .. plrInstance.AccountAge .. " дн.)"
+		local okReg, code = pcall(function()
+			return LocalizationService:GetCountryRegionForPlayerAsync(plrInstance)
+		end)
+		if okReg and code and code ~= "" then
+			currentRegionStr = regionNames[code] or code
+		elseif plrInstance.LocaleId and plrInstance.LocaleId ~= "" then
+			currentRegionStr = "Локаль: " .. plrInstance.LocaleId
+		else
+			currentRegionStr = "Неизвестно"
+		end
+	else
+		currentRegDateStr = "Загрузка..."
+		currentRegionStr = "Вне сервера (по API)"
+	end
+	updateDetailsText()
+	task.spawn(function()
+		local data = safeGet("https://roblox.com" .. tostring(userId))
+		if reqId ~= currentRequestId then return end
+		if data then
+			if data.displayName then displayNameLabel.Text = data.displayName end
+			if data.name then usernameLabel.Text = "@" .. data.name end
+			if data.created then
+				local y, m, d = data.created:match("^(%d+)%-(%d+)%-(%d+)")
+				if y and m and d then
+					local days = plrInstance and (" (" .. plrInstance.AccountAge .. " дн.)") or ""
+					currentRegDateStr = string.format("%s.%s.%s%s", d, m, y, days)
+					updateDetailsText()
+				end
+			end
+		end
+	end)
+	task.spawn(function()
+		local socialsData = safeGet("https://roblox.com" .. tostring(userId) .. "/promotion-channels")
+		if reqId ~= currentRequestId then return end
+		local links = {}
+		if socialsData and type(socialsData) == "table" then
+			local map = {
+				youtube = "YouTube", twitch = "Twitch", twitter = "X/Twitter",
+				facebook = "Facebook", guilded = "Guilded"
+			}
+			for key, label in pairs(map) do
+				local val = socialsData[key]
+				if val and type(val) == "string" and val ~= "" then
+					table.insert(links, label .. ": " .. val)
+				end
+			end
+		end
+		currentSocialsStr = (#links > 0) and table.concat(links, " | ") or "Нет привязанных ссылок"
+		updateDetailsText()
+	end)
+	task.spawn(function()
+		local totalSkinCost = 0
+		local expensiveList = {}
+		local foundLimited = false
+		local ok, appInfo = pcall(function()
+			return Players:GetCharacterAppearanceInfoAsync(userId)
+		end)
+		if reqId ~= currentRequestId then return end
+		if ok and appInfo and appInfo.assets then
+			for _, asset in ipairs(appInfo.assets) do
+				if reqId ~= currentRequestId then return end
+				local pOk, info = pcall(function()
+					return MarketplaceService:GetProductInfo(asset.id, Enum.InfoType.Asset)
+				end)
+				if pOk and info then
+					local price = (type(info.PriceInRobux) == "number") and info.PriceInRobux or 0
+					totalSkinCost += price
+					local tag = ""
+					if info.IsUnique == true then
+						tag = "LIMITED U"
+						foundLimited = true
+					elseif info.IsLimited == true then
+						tag = "LIMITED"
+						foundLimited = true
+					end
+					if price >= 2000 or tag ~= "" then
+						table.insert(expensiveList, {
+							id = asset.id,
+							name = info.Name or asset.name or "Предмет",
+							price = price,
+							tag = tag
+						})
+					end
+				end
+			end
+		end
+		if reqId ~= currentRequestId then return end
+		skinPriceLabel.Text = "Цена скина: " .. formatNumber(totalSkinCost) .. " R$"
+		cachedWornExp = expensiveList
+		wornExpBtn.Text = "Надето 2k+/Lim (" .. tostring(#cachedWornExp) .. ")"
+		if foundLimited then
+			enableRolimonsButton(userId)
+		end
+		if activeTab == "WornExp" then activeTab = nil; switchTab("WornExp") end
+	end)
+	task.spawn(function()
+		local data = safeGet("https://roblox.com" .. tostring(userId) .. "/outfits?itemsPerPage=50")
+		if reqId ~= currentRequestId then return end
+		if data and data.data and #data.data > 0 then
+			local names = {}
+			for idx, outfit in ipairs(data.data) do
+				if idx <= 3 then table.insert(names, outfit.name) end
+			end
+			local more = (#data.data > 3) and (" +" .. (#data.data - 3)) or ""
+			currentOutfitsStr = tostring(#data.data) .. " шт. (" .. table.concat(names, ", ") .. more .. ")"
+		else
+			local ok, appInfo = pcall(function()
+				return Players:GetCharacterAppearanceInfoAsync(userId)
+			end)
+			if reqId ~= currentRequestId then return end
+			if ok and appInfo and appInfo.assets then
+				currentOutfitsStr = "Скрыты (надето вещей: " .. tostring(#appInfo.assets) .. ")"
+			else
+				currentOutfitsStr = "Скрыты настройками"
+			end
+		end
+		updateDetailsText()
+	end)
+	task.spawn(function()
+		local badgesData = safeGet("https://roblox.com" .. tostring(userId) .. "/badges?limit=15&sortOrder=Desc")
+		if reqId ~= currentRequestId then return end
+		local list = (badgesData and badgesData.data) or {}
+		local awardedMap = {}
+		if #list > 0 then
+			local ids = {}
+			for _, b in ipairs(list) do
+				table.insert(ids, tostring(b.id))
+			end
+			local datesData = safeGet("https://roblox.com" .. tostring(userId) .. "/badges/awarded-dates?badgeIds=" .. table.concat(ids, ","))
+			if reqId ~= currentRequestId then return end
+			if datesData and datesData.data then
+				for _, entry in ipairs(datesData.data) do
+					awardedMap[entry.badgeId] = entry.awardedDate
+				end
+			end
+		end
+		renderBadgesStrip(list, awardedMap, reqId)
+	end)
+	task.spawn(function()
+		local list = {}
+		local apiData = safeGet("https://roblox.com" .. tostring(userId) .. "/friends")
+		if apiData and apiData.data then
+			for _, f in ipairs(apiData.data) do
+				table.insert(list, { id = f.id, name = f.name, displayName = f.displayName })
+			end
+		else
+			local ok, pages = pcall(function() return Players:GetFriendsAsync(userId) end)
+			if ok and pages then
+				while true do
+					for _, item in ipairs(pages:GetCurrentPage()) do
+						table.insert(list, { id = item.Id, name = item.Username, displayName = item.DisplayName })
+					end
+					if pages.IsFinished or #list >= 200 then break end
+					pcall(function() pages:AdvanceToNextPageAsync() end)
+				end
+			end
+		end
+		if reqId ~= currentRequestId then return end
+		cachedFriends = list
+		friendsBtn.Text = "Друзья (" .. tostring(#cachedFriends) .. ")"
+		if activeTab == "Friends" then activeTab = nil; switchTab("Friends") end
+	end)
+	task.spawn(function()
+		local activeGames = {}
+		local gamesData = safeGet("https://roblox.com" .. tostring(userId) .. "/games?accessFilter=Public&limit=50")
+		if gamesData and gamesData.data then
+			for _, g in ipairs(gamesData.data) do
+				if g.rootPlaceId then
+					table.insert(activeGames, g)
+				end
+			end
+		end
+		if reqId ~= currentRequestId then return end
+		cachedPlaces = activeGames
+		placesBtn.Text = "Плейсы (" .. tostring(#cachedPlaces) .. ")"
+		if activeTab == "Places" then activeTab = nil; switchTab("Places") end
+	end)
+	task.spawn(function()
+		local createdItems = {}
+		local catData = safeGet("https://roblox.com" .. tostring(userId) .. "&CreatorType=User&Limit=30")
+		if catData and catData.data then
+			for _, item in ipairs(catData.data) do
+				table.insert(createdItems, item)
+			end
+		end
+		if reqId ~= currentRequestId then return end
+		cachedItems = createdItems
+		itemsBtn.Text = "Косметика (" .. tostring(#cachedItems) .. ")"
+		if activeTab == "Items" then activeTab = nil; switchTab("Items") end
+	end)
+	task.spawn(function()
+		local favGames = {}
+		local favData = safeGet("https://roblox.com" .. tostring(userId) .. "/favorite/games?limit=50")
+		if favData and favData.data then
+			for _, g in ipairs(favData.data) do
+				table.insert(favGames, g)
+			end
+		end
+		if reqId ~= currentRequestId then return end
+		cachedFavGames = favGames
+		favGamesBtn.Text = "Фавориты игр (" .. tostring(#cachedFavGames) .. ")"
+		if activeTab == "FavGames" then activeTab = nil; switchTab("FavGames") end
+	end)
+	task.spawn(function()
+		local favAudio = {}
+		local audioData = safeGet("https://roblox.com" .. tostring(userId) .. "/favorites/3/assets?limit=50")
+		if audioData and audioData.data then
+			for _, a in ipairs(audioData.data) do
+				table.insert(favAudio, a)
+			end
+		end
 if reqId ~= currentRequestId then return end
 cachedFavAudio = favAudio
 favAudioBtn.Text = "Музыка (" .. tostring(#cachedFavAudio) .. ")"
