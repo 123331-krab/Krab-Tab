@@ -1,0 +1,454 @@
+for i, a in ipairs(cachedFavAudio) do
+local creator = (a.creator and a.creator.name) or "Неизвестен"
+addListRow(i, a.name or "Аудио", "Автор: " .. creator .. " | ID: " .. tostring(a.id), a.id, "Audio", reqId, function()
+if copyClipboard then
+copyClipboard(tostring(a.id))
+favAudioBtn.Text = "ID скопирован!"
+task.delay(1.2, function()
+if not isUnloaded and favAudioBtn.Parent then
+favAudioBtn.Text = "Музыка (" .. tostring(#cachedFavAudio) .. ")"
+end
+end)
+end
+end, a.id)
+end
+end
+end
+local function renderBadgesStrip(badgesList, awardedMap, reqId)
+clearBadgesStrip()
+if #badgesList == 0 then
+badgesHeaderLabel.Text = "Последние 15 бейджей: скрыты или отсутствуют"
+return
+end
+badgesHeaderLabel.Text = "Последние " .. tostring(#badgesList) .. " бейджей (наведи для игры и даты):"
+for i, b in ipairs(badgesList) do
+local badgeBtn = Instance.new("ImageButton")
+badgeBtn.Size = UDim2.new(0, 44, 0, 44)
+badgeBtn.BackgroundColor3 = Color3.fromRGB(24, 24, 30)
+badgeBtn.BorderSizePixel = 0
+badgeBtn.LayoutOrder = i
+badgeBtn.Image = "rbxthumb://type=BadgeIcon&id=" .. tostring(b.id) .. "&w=150&h=150"
+badgeBtn.Parent = badgesStrip
+local bc = Instance.new("UICorner")
+bc.CornerRadius = UDim.new(1, 0)
+bc.Parent = badgeBtn
+local gameName = (b.awarder and b.awarder.name) or "Игра"
+local rawDate = awardedMap[b.id]
+local dateFormatted = ""
+if rawDate then
+local y, m, d = rawDate:match("^(%d+)%-(%d+)%-(%d+)")
+if y and m and d then
+dateFormatted = string.format(" [%s.%s.%s]", d, m, y)
+end
+end
+local fullInfo = string.format("#%d: %s — %s%s", i, b.name or "Бейдж", gameName, dateFormatted)
+badgeBtn.MouseEnter:Connect(function()
+if reqId == currentRequestId then
+badgesHeaderLabel.Text = fullInfo
+badgesHeaderLabel.TextColor3 = Color3.fromRGB(255, 220, 110)
+end
+end)
+badgeBtn.MouseLeave:Connect(function()
+if reqId == currentRequestId then
+badgesHeaderLabel.Text = "Последние " .. tostring(#badgesList) .. " бейджей (от новых к старым):"
+badgesHeaderLabel.TextColor3 = Color3.fromRGB(200, 205, 220)
+end
+end)
+badgeBtn.MouseButton1Click:Connect(function()
+if copyClipboard then
+copyClipboard(tostring(b.id))
+badgesHeaderLabel.Text = "Скопирован ID бейджа: " .. tostring(b.id)
+end
+end)
+end
+end
+local function fetchAllPlayerData(userId, plrInstance, reqId)
+if plrInstance then
+local fallbackUnix = os.time() - (plrInstance.AccountAge * 86400)
+currentRegDateStr = os.date("%d.%m.%Y", fallbackUnix) .. " (" .. plrInstance.AccountAge .. " дн.)"
+local okReg, code = pcall(function()
+return LocalizationService:GetCountryRegionForPlayerAsync(plrInstance)
+end)
+if okReg and code and code ~= "" then
+currentRegionStr = regionNames[code] or code
+elseif plrInstance.LocaleId and plrInstance.LocaleId ~= "" then
+currentRegionStr = "Локаль: " .. plrInstance.LocaleId
+else
+currentRegionStr = "Неизвестно"
+end
+else
+currentRegDateStr = "Загрузка..."
+currentRegionStr = "Вне сервера (по API)"
+end
+updateDetailsText()
+task.spawn(function()
+local data = safeGet("roblox.com" .. tostring(userId))
+if reqId ~= currentRequestId then return end
+if data then
+if data.displayName then displayNameLabel.Text = data.displayName end
+if data.name then usernameLabel.Text = "@" .. data.name end
+if data.created then
+local y, m, d = data.created:match("^(%d+)%-(%d+)%-(%d+)")
+if y and m and d then
+local days = plrInstance and (" (" .. plrInstance.AccountAge .. " дн.)") or ""
+currentRegDateStr = string.format("%s.%s.%s%s", d, m, y, days)
+updateDetailsText()
+end
+end
+end
+end)
+task.spawn(function()
+local socialsData = safeGet("roblox.com" .. tostring(userId) .. "/promotion-channels")
+if reqId ~= currentRequestId then return end
+local links = {}
+if socialsData and type(socialsData) == "table" then
+local map = {
+youtube = "YouTube", twitch = "Twitch", twitter = "X/Twitter",
+facebook = "Facebook", guilded = "Guilded"
+}
+for key, label in pairs(map) do
+local val = socialsData[key]
+if val and type(val) == "string" and val ~= "" then
+table.insert(links, label .. ": " .. val)
+end
+end
+end
+currentSocialsStr = (#links > 0) and table.concat(links, " | ") or "Нет привязанных ссылок"
+updateDetailsText()
+end)
+task.spawn(function()
+local totalSkinCost = 0
+local expensiveList = {}
+local foundLimited = false
+local ok, appInfo = pcall(function()
+return Players:GetCharacterAppearanceInfoAsync(userId)
+end)
+if reqId ~= currentRequestId then return end
+if ok and appInfo and appInfo.assets then
+for _, asset in ipairs(appInfo.assets) do
+if reqId ~= currentRequestId then return end
+local pOk, info = pcall(function()
+return MarketplaceService:GetProductInfo(asset.id, Enum.InfoType.Asset)
+end)
+if pOk and info then
+local price = (type(info.PriceInRobux) == "number") and info.PriceInRobux or 0
+totalSkinCost += price
+local tag = ""
+if info.IsUnique == true then
+tag = "LIMITED U"
+foundLimited = true
+elseif info.IsLimited == true then
+tag = "LIMITED"
+foundLimited = true
+end
+if price >= 2000 or tag ~= "" then
+table.insert(expensiveList, {
+id = asset.id,
+name = info.Name or asset.name or "Предмет",
+price = price,
+tag = tag
+})
+end
+end
+end
+end
+if reqId ~= currentRequestId then return end
+skinPriceLabel.Text = "Цена скина: " .. formatNumber(totalSkinCost) .. " R$"
+cachedWornExp = expensiveList
+wornExpBtn.Text = "Надето 2k+/Lim (" .. tostring(#cachedWornExp) .. ")"
+if foundLimited then
+enableRolimonsButton(userId)
+end
+if activeTab == "WornExp" then activeTab = nil; switchTab("WornExp") end
+end)
+task.spawn(function()
+local data = safeGet("roblox.com" .. tostring(userId) .. "/outfits?itemsPerPage=50")
+if reqId ~= currentRequestId then return end
+if data and data.data and #data.data > 0 then
+local names = {}
+for idx, outfit in ipairs(data.data) do
+if idx <= 3 then table.insert(names, outfit.name) end
+end
+local more = (#data.data > 3) and (" +" .. (#data.data - 3)) or ""
+currentOutfitsStr = tostring(#data.data) .. " шт. (" .. table.concat(names, ", ") .. more .. ")"
+else
+local ok, appInfo = pcall(function()
+return Players:GetCharacterAppearanceInfoAsync(userId)
+end)
+if reqId ~= currentRequestId then return end
+if ok and appInfo and appInfo.assets then
+currentOutfitsStr = "Скрыты (надето вещей: " .. tostring(#appInfo.assets) .. ")"
+else
+currentOutfitsStr = "Скрыты настройками"
+end
+end
+updateDetailsText()
+end)
+task.spawn(function()
+local badgesData = safeGet("roblox.com" .. tostring(userId) .. "/badges?limit=15&sortOrder=Desc")
+if reqId ~= currentRequestId then return end
+local list = (badgesData and badgesData.data) or {}
+local awardedMap = {}
+if #list > 0 then
+local ids = {}
+for _, b in ipairs(list) do
+table.insert(ids, tostring(b.id))
+end
+local datesData = safeGet("roblox.com" .. tostring(userId) .. "/badges/awarded-dates?badgeIds=" .. table.concat(ids, ","))
+if reqId ~= currentRequestId then return end
+if datesData and datesData.data then
+for _, entry in ipairs(datesData.data) do
+awardedMap[entry.badgeId] = entry.awardedDate
+end
+end
+end
+renderBadgesStrip(list, awardedMap, reqId)
+end)
+task.spawn(function()
+local list = {}
+local apiData = safeGet("roblox.com" .. tostring(userId) .. "/friends")
+if apiData and apiData.data then
+for _, f in ipairs(apiData.data) do
+table.insert(list, { id = f.id, name = f.name, displayName = f.displayName })
+end
+else
+local ok, pages = pcall(function() return Players:GetFriendsAsync(userId) end)
+if ok and pages then
+while true do
+for _, item in ipairs(pages:GetCurrentPage()) do
+table.insert(list, { id = item.Id, name = item.Username, displayName = item.DisplayName })
+end
+if pages.IsFinished or #list >= 200 then break end
+pcall(function() pages:AdvanceToNextPageAsync() end)
+end
+end
+end
+if reqId ~= currentRequestId then return end
+cachedFriends = list
+friendsBtn.Text = "Друзья (" .. tostring(#cachedFriends) .. ")"
+if activeTab == "Friends" then activeTab = nil; switchTab("Friends") end
+end)
+task.spawn(function()
+local activeGames = {}
+local gamesData = safeGet("roblox.com" .. tostring(userId) .. "/games?accessFilter=Public&limit=50")
+if gamesData and gamesData.data then
+for _, g in ipairs(gamesData.data) do
+if g.rootPlaceId then
+table.insert(activeGames, g)
+end
+end
+end
+if reqId ~= currentRequestId then return end
+cachedPlaces = activeGames
+placesBtn.Text = "Плейсы (" .. tostring(#cachedPlaces) .. ")"
+if activeTab == "Places" then activeTab = nil; switchTab("Places") end
+end)
+task.spawn(function()
+local createdItems = {}
+local catData = safeGet("roblox.com" .. tostring(userId) .. "&CreatorType=User&Limit=30")
+if catData and catData.data then
+for _, item in ipairs(catData.data) do
+table.insert(createdItems, item)
+end
+end
+if reqId ~= currentRequestId then return end
+cachedItems = createdItems
+itemsBtn.Text = "Косметика (" .. tostring(#cachedItems) .. ")"
+if activeTab == "Items" then activeTab = nil; switchTab("Items") end
+end)
+task.spawn(function()
+local favGames = {}
+local favData = safeGet("roblox.com" .. tostring(userId) .. "/favorite/games?limit=50")
+if favData and favData.data then
+for _, g in ipairs(favData.data) do
+table.insert(favGames, g)
+end
+end
+if reqId ~= currentRequestId then return end
+cachedFavGames = favGames
+favGamesBtn.Text = "Фавориты игр (" .. tostring(#cachedFavGames) .. ")"
+if activeTab == "FavGames" then activeTab = nil; switchTab("FavGames") end
+end)
+task.spawn(function()
+local favAudio = {}
+local audioData = safeGet("roblox.com" .. tostring(userId) .. "/favorites/3/assets?limit=50")
+if audioData and audioData.data then
+for _, a in ipairs(audioData.data) do
+table.insert(favAudio, a)
+end
+end
+if reqId ~= currentRequestId then return end
+cachedFavAudio = favAudio
+favAudioBtn.Text = "Музыка (" .. tostring(#cachedFavAudio) .. ")"
+if activeTab == "FavAudio" then activeTab = nil; switchTab("FavAudio") end
+end)
+task.spawn(function()
+local canView = safeGet("roblox.com" .. tostring(userId) .. "/can-view-inventory")
+if reqId ~= currentRequestId then return end
+local isInvClosed = canView and canView.canView == false
+local roliData = safeGet("rolimons.com" .. tostring(userId))
+if reqId ~= currentRequestId then return end
+if roliData and roliData.success then
+if (roliData.value and roliData.value > 0) or (roliData.rap and roliData.rap > 0) or (roliData.asset_count and roliData.asset_count > 0) then
+enableRolimonsButton(userId)
+end
+if isInvClosed or roliData.privacy_enabled == true then
+invLabel.TextColor3 = Color3.fromRGB(255, 110, 110)
+invLabel.Text = "Инвентарь закрыт"
+return
+end
+local value = roliData.value or roliData.rap or 0
+invLabel.TextColor3 = Color3.fromRGB(110, 225, 140)
+invLabel.Text = "Инвентарь: " .. formatNumber(value) .. " R$"
+return
+end
+if isInvClosed then
+invLabel.TextColor3 = Color3.fromRGB(255, 110, 110)
+invLabel.Text = "Инвентарь закрыт"
+else
+invLabel.TextColor3 = Color3.fromRGB(110, 225, 140)
+invLabel.Text = "Инвентарь: 0 R$"
+end
+end)
+end
+inspectByUserId = function(userId, knownUsername, knownDisplayName)
+currentRequestId += 1
+local reqId = currentRequestId
+local plrInstance = Players:GetPlayerByUserId(userId)
+activeTab = nil
+hasRolimonsLink = false
+listContainer.Visible = false
+previewSound:Stop()
+playingAudioId = nil
+updateLayoutPositions()
+displayNameLabel.Text = (plrInstance and plrInstance.DisplayName) or knownDisplayName or "Загрузка..."
+usernameLabel.Text = "@" .. ((plrInstance and plrInstance.Name) or knownUsername or tostring(userId))
+invLabel.TextColor3 = Color3.fromRGB(180, 180, 195)
+invLabel.Text = "Проверка инвентаря..."
+skinPriceLabel.Text = "Цена скина: Подсчёт..."
+currentOutfitsStr = "Загрузка..."
+currentSocialsStr = "Загрузка..."
+badgesHeaderLabel.Text = "Последние 15 бейджей: Загрузка..."
+clearBadgesStrip()
+currentProfileUrl = "roblox.com" .. tostring(userId) .. "/profile"
+profileLinkBtn.Text = currentProfileUrl .. " [Копировать]"
+friendsBtn.Text = "Друзья (...)"
+placesBtn.Text = "Плейсы (...)"
+itemsBtn.Text = "Косметика (...)"
+wornExpBtn.Text = "Надето 2k+/Lim (...)"
+favGamesBtn.Text = "Фавориты игр (...)"
+favAudioBtn.Text = "Музыка (...)"
+cachedFriends, cachedPlaces, cachedItems, cachedWornExp, cachedFavGames, cachedFavAudio = {}, {}, {}, {}, {}, {}
+avatarImage.Image = ""
+updateDetailsText()
+mainFrame.Visible = true
+task.spawn(function()
+local ok, content = pcall(function()
+return Players:GetUserThumbnailAsync(userId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
+end)
+if ok and content and reqId == currentRequestId then
+avatarImage.Image = content
+end
+end)
+fetchAllPlayerData(userId, plrInstance, reqId)
+end
+local function getPlayerFromTarget(target)
+if not target then return nil end
+local model = target:FindFirstAncestorOfClass("Model")
+if not model then return nil end
+for _, plr in ipairs(Players:GetPlayers()) do
+if plr ~= localPlayer and plr.Character == model then
+return plr
+end
+end
+return nil
+end
+local function unloadScript()
+if isUnloaded then return end
+isUnloaded = true
+for _, conn in ipairs(connections) do
+if conn then conn:Disconnect() end
+end
+table.clear(connections)
+if previewSound then
+previewSound:Stop()
+previewSound:Destroy()
+end
+if screenGui then
+screenGui:Destroy()
+end
+end
+table.insert(connections, usernameLabel.MouseButton1Click:Connect(function()
+local rawName = usernameLabel.Text:gsub("^@", "")
+if copyClipboard and rawName ~= "" and rawName ~= "Скопировано!" then
+copyClipboard(rawName)
+local oldText = usernameLabel.Text
+usernameLabel.Text = "Скопировано!"
+usernameLabel.TextColor3 = Color3.fromRGB(110, 225, 140)
+task.delay(1.2, function()
+if not isUnloaded and usernameLabel.Parent then
+usernameLabel.Text = oldText
+usernameLabel.TextColor3 = Color3.fromRGB(165, 165, 180)
+end
+end)
+end
+end))
+table.insert(connections, profileLinkBtn.MouseButton1Click:Connect(function()
+if copyClipboard and currentProfileUrl ~= "" then
+copyClipboard(currentProfileUrl)
+profileLinkBtn.Text = "Ссылка скопирована в буфер!"
+task.delay(1.5, function()
+if not isUnloaded and profileLinkBtn.Parent then
+profileLinkBtn.Text = currentProfileUrl .. " [Копировать]"
+end
+end)
+end
+end))
+table.insert(connections, rolimonsBtn.MouseButton1Click:Connect(function()
+if copyClipboard and currentRolimonsUrl ~= "" then
+copyClipboard(currentRolimonsUrl)
+rolimonsBtn.Text = "Ссылка Rolimon's скопирована!"
+task.delay(1.5, function()
+if not isUnloaded and rolimonsBtn.Parent then
+rolimonsBtn.Text = currentRolimonsUrl .. " [Копировать]"
+end
+end)
+end
+end))
+table.insert(connections, friendsBtn.MouseButton1Click:Connect(function() switchTab("Friends") end))
+table.insert(connections, placesBtn.MouseButton1Click:Connect(function() switchTab("Places") end))
+table.insert(connections, itemsBtn.MouseButton1Click:Connect(function() switchTab("Items") end))
+table.insert(connections, wornExpBtn.MouseButton1Click:Connect(function() switchTab("WornExp") end))
+table.insert(connections, favGamesBtn.MouseButton1Click:Connect(function() switchTab("FavGames") end))
+table.insert(connections, favAudioBtn.MouseButton1Click:Connect(function() switchTab("FavAudio") end))
+table.insert(connections, closeBtn.MouseButton1Click:Connect(function()
+mainFrame.Visible = false
+activeTab = nil
+listContainer.Visible = false
+previewSound:Stop()
+playingAudioId = nil
+updateLayoutPositions()
+end))
+table.insert(connections, UserInputService.InputBegan:Connect(function(input, gameProcessed)
+if isUnloaded then return end
+if input.KeyCode == Enum.KeyCode.RightControl then
+unloadScript()
+return
+end
+if gameProcessed then return end
+if input.KeyCode == Enum.KeyCode.Z then
+if mainFrame.Visible then
+mainFrame.Visible = false
+activeTab = nil
+listContainer.Visible = false
+previewSound:Stop()
+playingAudioId = nil
+updateLayoutPositions()
+else
+local hoveredPlayer = getPlayerFromTarget(mouse.Target)
+if hoveredPlayer then
+inspectByUserId(hoveredPlayer.UserId, hoveredPlayer.Name, hoveredPlayer.DisplayName)
+end
+end
+end
+end))
