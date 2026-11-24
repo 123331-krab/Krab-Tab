@@ -30,7 +30,7 @@ Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 8)
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, 0, 0, 26)
 title.BackgroundTransparency = 1
-title.Text = "Цвет скина [F - Лёд]"
+title.Text = "Цвет скина"
 title.TextColor3 = Color3.fromRGB(220, 220, 220)
 title.Font = Enum.Font.GothamBold
 title.TextSize = 12
@@ -99,7 +99,6 @@ local modes = {"Радуга", "Монохром", "Тон кожи", "Золо�
 local currentModeIdx = 1
 local isSuperSmooth = false
 local isRunning = false
-local isIceMode = false
 local isDestroyed = false
 local step = 0
 local waitDelay = 0.15
@@ -175,11 +174,6 @@ end
 local function getModeColor(t)
     local rawWave = 1 - math.abs((t % 2) - 1)
     local wave = isSuperSmooth and (rawWave * rawWave * (3 - 2 * rawWave)) or rawWave
-    if isIceMode then
-        local frostWhite = Color3.fromRGB(242, 249, 255)
-        local subtleIce = Color3.fromRGB(205, 232, 255)
-        return frostWhite:Lerp(subtleIce, wave)
-    end
     local mode = modes[currentModeIdx]
     if mode == "Радуга" then
         return Color3.fromHSV((t * 0.5) % 1, 1, 1)
@@ -220,7 +214,6 @@ local function startTransition()
     task.spawn(function()
         if not findCatalogRemote() then
             isRunning = false
-            isIceMode = false
             startBtn.Text = "No Remote"
             startBtn.BackgroundColor3 = Color3.fromRGB(160, 140, 20)
             return
@@ -281,29 +274,28 @@ end)
 local inputConn
 inputConn = UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed or isDestroyed then return end
-    if input.KeyCode == Enum.KeyCode.F then
-        isIceMode = not isIceMode
-        if isIceMode then
-            local wasAlreadyActive = isRunning
-            isRunning = false
-            startBtn.Text = "Включить"
-            startBtn.BackgroundColor3 = Color3.fromRGB(40, 170, 80)
-            title.Text = "Лёд: ВКЛ [F]"
-            step = 0
-            saveOriginalColors()
-            if not wasAlreadyActive then
-                startTransition()
-            end
-        else
-            title.Text = "Цвет скина [F - Лёд]"
-            restoreOriginalColors()
-        end
-    elseif input.KeyCode == Enum.KeyCode.Delete then
+     if input.KeyCode == Enum.KeyCode.Delete then
         isRunning = false
-        isIceMode = false
         isDestroyed = true
         restoreOriginalColors()
         if inputConn then inputConn:Disconnect() end
         if screenGui then screenGui:Destroy() end
     end
 end)
+
+local function unloadScript()
+    pcall(function() isRunning = false end)
+    pcall(function() isDestroyed = true end)
+    pcall(function() restoreOriginalColors() end)
+    
+    local pg = game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")
+    if pg then
+        for _, name in ipairs({"SkinModeGui", "ColorTransitionGui"}) do
+            local gui = pg:FindFirstChild(name)
+            if gui then gui:Destroy() end
+        end
+    end
+end
+
+_G.KrabHubScripts = _G.KrabHubScripts or {}
+_G.KrabHubScripts["SkinColorСhanging"] = unloadScript
