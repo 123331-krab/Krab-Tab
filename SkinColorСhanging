@@ -1,0 +1,309 @@
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+local oldGui = playerGui:FindFirstChild("SkinModeGui")
+if oldGui then oldGui:Destroy() end
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "SkinModeGui"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = playerGui
+local toggleGuiBtn = Instance.new("TextButton")
+toggleGuiBtn.Size = UDim2.new(0, 32, 0, 32)
+toggleGuiBtn.Position = UDim2.new(0.95, -35, 0.1, 0)
+toggleGuiBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+toggleGuiBtn.TextColor3 = Color3.fromRGB(255, 80, 80)
+toggleGuiBtn.Font = Enum.Font.GothamBold
+toggleGuiBtn.TextSize = 16
+toggleGuiBtn.Text = "X"
+toggleGuiBtn.Parent = screenGui
+Instance.new("UICorner", toggleGuiBtn).CornerRadius = UDim.new(0, 6)
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 195, 0, 192)
+mainFrame.Position = UDim2.new(0.95, -240, 0.1, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+mainFrame.Active = true
+mainFrame.Draggable = true
+mainFrame.Parent = screenGui
+Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 8)
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 26)
+title.BackgroundTransparency = 1
+title.Text = "Цвет скина [F - Лёд]"
+title.TextColor3 = Color3.fromRGB(220, 220, 220)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 12
+title.Parent = mainFrame
+local modeBtn = Instance.new("TextButton")
+modeBtn.Size = UDim2.new(0.9, 0, 0, 32)
+modeBtn.Position = UDim2.new(0.05, 0, 0, 30)
+modeBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+modeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+modeBtn.Font = Enum.Font.Gotham
+modeBtn.TextSize = 12
+modeBtn.Text = "Режим: Радуга"
+modeBtn.Parent = mainFrame
+Instance.new("UICorner", modeBtn).CornerRadius = UDim.new(0, 6)
+local smoothBtn = Instance.new("TextButton")
+smoothBtn.Size = UDim2.new(0.9, 0, 0, 32)
+smoothBtn.Position = UDim2.new(0.05, 0, 0, 68)
+smoothBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+smoothBtn.TextColor3 = Color3.fromRGB(160, 220, 255)
+smoothBtn.Font = Enum.Font.Gotham
+smoothBtn.TextSize = 12
+smoothBtn.Text = "Плавность: Обычная"
+smoothBtn.Parent = mainFrame
+Instance.new("UICorner", smoothBtn).CornerRadius = UDim.new(0, 6)
+local delayDownBtn = Instance.new("TextButton")
+delayDownBtn.Size = UDim2.new(0.22, 0, 0, 30)
+delayDownBtn.Position = UDim2.new(0.05, 0, 0, 106)
+delayDownBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
+delayDownBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+delayDownBtn.Font = Enum.Font.GothamBold
+delayDownBtn.TextSize = 16
+delayDownBtn.Text = "-"
+delayDownBtn.Parent = mainFrame
+Instance.new("UICorner", delayDownBtn).CornerRadius = UDim.new(0, 6)
+local delayLabel = Instance.new("TextLabel")
+delayLabel.Size = UDim2.new(0.42, 0, 0, 30)
+delayLabel.Position = UDim2.new(0.29, 0, 0, 106)
+delayLabel.BackgroundColor3 = Color3.fromRGB(35, 35, 42)
+delayLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+delayLabel.Font = Enum.Font.Gotham
+delayLabel.TextSize = 11
+delayLabel.Text = "Ждать: 0.15с"
+delayLabel.Parent = mainFrame
+Instance.new("UICorner", delayLabel).CornerRadius = UDim.new(0, 6)
+local delayUpBtn = Instance.new("TextButton")
+delayUpBtn.Size = UDim2.new(0.22, 0, 0, 30)
+delayUpBtn.Position = UDim2.new(0.73, 0, 0, 106)
+delayUpBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
+delayUpBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+delayUpBtn.Font = Enum.Font.GothamBold
+delayUpBtn.TextSize = 16
+delayUpBtn.Text = "+"
+delayUpBtn.Parent = mainFrame
+Instance.new("UICorner", delayUpBtn).CornerRadius = UDim.new(0, 6)
+local startBtn = Instance.new("TextButton")
+startBtn.Size = UDim2.new(0.9, 0, 0, 36)
+startBtn.Position = UDim2.new(0.05, 0, 0, 144)
+startBtn.BackgroundColor3 = Color3.fromRGB(40, 170, 80)
+startBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+startBtn.Font = Enum.Font.GothamBold
+startBtn.TextSize = 13
+startBtn.Text = "Включить"
+startBtn.Parent = mainFrame
+Instance.new("UICorner", startBtn).CornerRadius = UDim.new(0, 6)
+local modes = {"Радуга", "Монохром", "Тон кожи", "Золото", "Галактика", "Огонь"}
+local currentModeIdx = 1
+local isSuperSmooth = false
+local isRunning = false
+local isIceMode = false
+local isDestroyed = false
+local step = 0
+local waitDelay = 0.15
+local savedColors = nil
+local draggingBtn, dragInput, dragStart, startPos
+local wasDragged = false
+toggleGuiBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        draggingBtn = true
+        wasDragged = false
+        dragStart = input.Position
+        startPos = toggleGuiBtn.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then draggingBtn = false end
+        end)
+    end
+end)
+toggleGuiBtn.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and draggingBtn then
+        local delta = input.Position - dragStart
+        if delta.Magnitude > 4 then wasDragged = true end
+        toggleGuiBtn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+toggleGuiBtn.MouseButton1Click:Connect(function()
+    if isDestroyed or wasDragged then return end
+    mainFrame.Visible = not mainFrame.Visible
+    toggleGuiBtn.Text = mainFrame.Visible and "X" or "+"
+    toggleGuiBtn.TextColor3 = mainFrame.Visible and Color3.fromRGB(255, 80, 80) or Color3.fromRGB(80, 255, 120)
+end)
+local function saveOriginalColors()
+    if savedColors then return end
+    local char = player.Character
+    if not char then return end
+    local bc = char:FindFirstChildOfClass("BodyColors")
+    if bc then
+        savedColors = {
+            HeadColor = bc.HeadColor3, TorsoColor = bc.TorsoColor3,
+            LeftArmColor = bc.LeftArmColor3, RightArmColor = bc.RightArmColor3,
+            LeftLegColor = bc.LeftLegColor3, RightLegColor = bc.RightLegColor3
+        }
+    end
+end
+local function findCatalogRemote()
+    local remote = ReplicatedStorage:FindFirstChild("CatalogGuiRemote", true)
+    if remote and remote:IsA("RemoteFunction") then return remote end
+    for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
+        if obj:IsA("RemoteFunction") and (obj.Name:lower():find("catalog") or obj.Name:lower():find("desc")) then
+            return obj
+        end
+    end
+    return nil
+end
+local function applyColors(colorTable)
+    local remote = findCatalogRemote()
+    if not remote then return false end
+    pcall(function()
+        remote:InvokeServer({["Action"] = "UpdateHumanDescProperties", ["Properties"] = colorTable})
+    end)
+    return true
+end
+local function restoreOriginalColors()
+    if savedColors then
+        applyColors(savedColors)
+        savedColors = nil
+    end
+end
+local function getModeColor(t)
+    local rawWave = 1 - math.abs((t % 2) - 1)
+    local wave = isSuperSmooth and (rawWave * rawWave * (3 - 2 * rawWave)) or rawWave
+    if isIceMode then
+        local frostWhite = Color3.fromRGB(242, 249, 255)
+        local subtleIce = Color3.fromRGB(205, 232, 255)
+        return frostWhite:Lerp(subtleIce, wave)
+    end
+    local mode = modes[currentModeIdx]
+    if mode == "Радуга" then
+        return Color3.fromHSV((t * 0.5) % 1, 1, 1)
+    elseif mode == "Монохром" then
+        return Color3.new(wave, wave, wave)
+    elseif mode == "Тон кожи" then
+        local lightSkin = Color3.fromRGB(255, 224, 196)
+        local darkSkin = Color3.fromRGB(55, 32, 20)
+        return lightSkin:Lerp(darkSkin, wave)
+    elseif mode == "Золото" then
+        local deepAmber = Color3.fromRGB(130, 80, 10)
+        local brightGold = Color3.fromRGB(255, 225, 90)
+        return deepAmber:Lerp(brightGold, wave)
+    elseif mode == "Галактика" then
+        local c1 = Color3.fromRGB(18, 10, 45)
+        local c2 = Color3.fromRGB(135, 35, 225)
+        local c3 = Color3.fromRGB(45, 200, 255)
+        if wave < 0.5 then
+            return c1:Lerp(c2, wave * 2)
+        else
+            return c2:Lerp(c3, (wave - 0.5) * 2)
+        end
+    elseif mode == "Огонь" then
+        local f1 = Color3.fromRGB(95, 15, 0)
+        local f2 = Color3.fromRGB(240, 55, 0)
+        local f3 = Color3.fromRGB(255, 145, 0)
+        local f4 = Color3.fromRGB(255, 235, 110)
+        if wave < 0.33 then
+            return f1:Lerp(f2, wave / 0.33)
+        elseif wave < 0.66 then
+            return f2:Lerp(f3, (wave - 0.33) / 0.33)
+        else
+            return f3:Lerp(f4, (wave - 0.66) / 0.34)
+        end
+    end
+end
+local function startTransition()
+    task.spawn(function()
+        if not findCatalogRemote() then
+            isRunning = false
+            isIceMode = false
+            startBtn.Text = "No Remote"
+            startBtn.BackgroundColor3 = Color3.fromRGB(160, 140, 20)
+            return
+        end
+        while (isRunning or isIceMode) and not isDestroyed do
+            local c = getModeColor(step)
+            applyColors({
+                HeadColor = c, TorsoColor = c, LeftArmColor = c,
+                RightArmColor = c, LeftLegColor = c, RightLegColor = c
+            })
+            local currentStepSize = isSuperSmooth and 0.012 or 0.04
+            step = step + currentStepSize
+            task.wait(waitDelay)
+        end
+    end)
+end
+delayDownBtn.MouseButton1Click:Connect(function()
+    if isDestroyed then return end
+    waitDelay = math.max(0.03, math.floor((waitDelay - 0.02) * 100 + 0.5) / 100)
+    delayLabel.Text = string.format("Ждать: %.2fс", waitDelay)
+end)
+delayUpBtn.MouseButton1Click:Connect(function()
+    if isDestroyed then return end
+    waitDelay = math.min(0.50, math.floor((waitDelay + 0.02) * 100 + 0.5) / 100)
+    delayLabel.Text = string.format("Ждать: %.2fс", waitDelay)
+end)
+modeBtn.MouseButton1Click:Connect(function()
+    if isDestroyed then return end
+    currentModeIdx = (currentModeIdx % #modes) + 1
+    modeBtn.Text = "Режим: " .. modes[currentModeIdx]
+    step = 0
+end)
+smoothBtn.MouseButton1Click:Connect(function()
+    if isDestroyed then return end
+    isSuperSmooth = not isSuperSmooth
+    smoothBtn.Text = isSuperSmooth and "Плавность: Макс" or "Плавность: Обычная"
+    smoothBtn.TextColor3 = isSuperSmooth and Color3.fromRGB(120, 255, 180) or Color3.fromRGB(160, 220, 255)
+end)
+startBtn.MouseButton1Click:Connect(function()
+    if isDestroyed then return end
+    if isIceMode then
+        isIceMode = false
+        title.Text = "Цвет скина [F - Лёд]"
+    end
+    isRunning = not isRunning
+    if isRunning then
+        step = 0
+        saveOriginalColors()
+        startBtn.Text = "Выключить"
+        startBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+        startTransition()
+    else
+        startBtn.Text = "Включить"
+        startBtn.BackgroundColor3 = Color3.fromRGB(40, 170, 80)
+        restoreOriginalColors()
+    end
+end)
+local inputConn
+inputConn = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed or isDestroyed then return end
+    if input.KeyCode == Enum.KeyCode.F then
+        isIceMode = not isIceMode
+        if isIceMode then
+            local wasAlreadyActive = isRunning
+            isRunning = false
+            startBtn.Text = "Включить"
+            startBtn.BackgroundColor3 = Color3.fromRGB(40, 170, 80)
+            title.Text = "Лёд: ВКЛ [F]"
+            step = 0
+            saveOriginalColors()
+            if not wasAlreadyActive then
+                startTransition()
+            end
+        else
+            title.Text = "Цвет скина [F - Лёд]"
+            restoreOriginalColors()
+        end
+    elseif input.KeyCode == Enum.KeyCode.Delete then
+        isRunning = false
+        isIceMode = false
+        isDestroyed = true
+        restoreOriginalColors()
+        if inputConn then inputConn:Disconnect() end
+        if screenGui then screenGui:Destroy() end
+    end
+end)
