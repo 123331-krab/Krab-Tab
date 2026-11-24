@@ -1,3 +1,7 @@
+--MADE_KRAB123331--
+
+
+
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -218,7 +222,7 @@ local function startTransition()
             startBtn.BackgroundColor3 = Color3.fromRGB(160, 140, 20)
             return
         end
-        while (isRunning or isIceMode) and not isDestroyed do
+        while isRunning and not isDestroyed do
             local c = getModeColor(step)
             applyColors({
                 HeadColor = c, TorsoColor = c, LeftArmColor = c,
@@ -254,10 +258,6 @@ smoothBtn.MouseButton1Click:Connect(function()
 end)
 startBtn.MouseButton1Click:Connect(function()
     if isDestroyed then return end
-    if isIceMode then
-        isIceMode = false
-        title.Text = "Цвет скина [F - Лёд]"
-    end
     isRunning = not isRunning
     if isRunning then
         step = 0
